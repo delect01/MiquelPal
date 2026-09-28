@@ -1,0 +1,24 @@
+import * as THREE from "three";
+
+import {
+  getPieceWorldVertices
+} from "./pieceGeometry";
+
+export function getPieceBoundingBox(piece) {
+  /*
+    Obtenim els vèrtexs físics reals de
+    la peça en coordenades de Three.js.
+  */
+  const worldVertices =
+    getPieceWorldVertices(piece);
+
+  /*
+    Creem una Box3 que envolta els
+    vèrtexs reals.
+
+    Aquesta caixa es farà servir com a
+    comprovació ràpida.
+  */
+  return new THREE.Box3()
+    .setFromPoints(worldVertices);
+}
