@@ -6,6 +6,8 @@ import {
 } from "react";
 
 import PalletPreview from "./PalletPreview";
+import Import3DButton from "./Import3DButton.jsx";
+import { loadTransformedStoredModel } from "../utils/modelLoader.js";
 
 const STORAGE_KEY =
   "pallet-simulator-pallet-library";
@@ -137,7 +139,8 @@ export default function PalletDialog({
   open,
   activePallet,
   onClose,
-  onApplyPallet
+  onApplyPallet,
+  t
 }) {
   const [
     form,
@@ -280,7 +283,7 @@ useEffect(() => {
 
     if (!dimensionsAreValid) {
       setFeedbackMessage(
-        "Les dimensions X, Y i Z han de ser nombres superiors a zero."
+        t.palletDialog.invalidDimensions
       );
 
       return null;
@@ -318,7 +321,7 @@ useEffect(() => {
 
     if (!validatedData.name) {
       setFeedbackMessage(
-        "Has d'escriure un nom abans de guardar el palet."
+        t.palletDialog.nameRequired
       );
 
       return;
@@ -374,7 +377,7 @@ useEffect(() => {
 
     if (!wasSaved) {
       setFeedbackMessage(
-        "No s'ha pogut guardar el palet."
+        t.palletDialog.saveError
       );
 
       return;
@@ -386,8 +389,8 @@ useEffect(() => {
 
     setFeedbackMessage(
       existingPallet
-        ? "La plantilla del palet s'ha actualitzat."
-        : "La plantilla del palet s'ha guardat."
+        ? t.palletDialog.templateUpdated
+        : t.palletDialog.templateSaved
     );
   }
 
@@ -430,14 +433,14 @@ useEffect(() => {
     );
 
     setFeedbackMessage(
-      `Palet aplicat: ${selectedPallet.name}`
+      t.palletDialog.applied(selectedPallet.name)
     );
   }
 
   function handleDeleteTemplate() {
     if (!selectedSavedPalletId) {
       setFeedbackMessage(
-        "Selecciona una plantilla abans d'eliminar-la."
+        t.palletDialog.selectBeforeDelete
       );
 
       return;
@@ -457,7 +460,7 @@ useEffect(() => {
 
     if (!wasSaved) {
       setFeedbackMessage(
-        "No s'ha pogut eliminar la plantilla."
+        t.palletDialog.deleteError
       );
 
       return;
@@ -469,7 +472,7 @@ useEffect(() => {
 
     setSelectedSavedPalletId("");
     setFeedbackMessage(
-      "La plantilla del palet s'ha eliminat."
+      t.palletDialog.templateDeleted
     );
   }
 
@@ -505,7 +508,7 @@ useEffect(() => {
     <div
       role="dialog"
       aria-modal="true"
-      aria-label="Configurar palet"
+      aria-label={t.palletDialog.configure}
       style={{
         position: "fixed",
         inset: 0,
@@ -556,7 +559,7 @@ useEffect(() => {
                 margin: 0
               }}
             >
-              Configurar palet
+              {t.palletDialog.configure}
             </h2>
 
             <div
@@ -566,14 +569,14 @@ useEffect(() => {
                 fontSize: "14px"
               }}
             >
-              Defineix el palet únic del simulador.
+              {t.palletDialog.subtitle}
             </div>
           </div>
 
           <button
             type="button"
             onClick={onClose}
-            aria-label="Tancar"
+            aria-label={t.palletDialog.close}
             style={{
               width: "38px",
               height: "38px",
@@ -614,8 +617,8 @@ useEffect(() => {
                   fontSize: "16px"
                 }}
               >
-                Biblioteca de palets
-              </h3>
+              {t.palletDialog.library}
+            </h3>
 
               <select
                 value={
@@ -643,8 +646,8 @@ useEffect(() => {
                   value=""
                   disabled
                 >
-                  Llistat
-                </option>
+              {t.palletDialog.list}
+            </option>
 
                 {[...savedPallets]
                   .sort((
@@ -714,31 +717,14 @@ useEffect(() => {
                         : "not-allowed"
                   }}
                 >
-                  Eliminar plantilla
-                </button>
+              {t.palletDialog.deleteTemplate}
+            </button>
 
-                <button
-                  type="button"
-                  onClick={() => {
-                    /*
-                      Funcionalitat futura:
-                      importació de models 3D.
-                    */
-                  }}
-                  style={{
-                    flex: 1,
-                    padding:
-                      "8px 10px",
-                    border:
-                      "1px solid #2767c5",
-                    borderRadius: "5px",
-                    background: "#ffffff",
-                    color: "#2767c5",
-                    cursor: "pointer"
-                  }}
-                >
-                  Importar 3D
-                </button>
+                <Import3DButton t={t} onImported={async (importedModel) => {
+                  const modelData = { modelId: importedModel.modelId, modelName: importedModel.modelName, modelFormat: importedModel.modelFormat, modelUnit: importedModel.modelUnit, modelBottomFace: importedModel.modelBottomFace ?? "NEGATIVE_Y", rotationX: 0, rotationY: 0, rotationZ: 0 };
+                  const loaded = await loadTransformedStoredModel(modelData.modelId, modelData);
+                  setForm((current) => ({ ...current, name: current.name || importedModel.name || "", sizeX: loaded.palletDimensions.sizeX, sizeY: loaded.palletDimensions.sizeY, sizeZ: loaded.palletDimensions.sizeZ, modelType: "IMPORTED_3D", modelData }));
+                }} />
               </div>
             </section>
 
@@ -757,8 +743,8 @@ useEffect(() => {
                   fontSize: "16px"
                 }}
               >
-                Característiques
-              </h3>
+              {t.palletDialog.characteristics}
+            </h3>
 
               <label
                 style={{
@@ -772,12 +758,11 @@ useEffect(() => {
                   fontWeight: 600
                 }}
               >
-                Nom del palet
-
-                <input
+              {t.palletDialog.palletName}
+            <input
                   type="text"
                   value={form.name}
-                  placeholder="Exemple: Palet europeu"
+                  placeholder={t.palletDialog.namePlaceholder}
                   onChange={(event) => {
                     updateFormField(
                       "name",
@@ -805,7 +790,7 @@ useEffect(() => {
                 }}
               >
                 <NumericField
-                  label="Mida X"
+                  label={t.palletDialog.sizeX}
                   value={form.sizeX}
                   onChange={(value) => {
                     updateNumericField(
@@ -816,7 +801,7 @@ useEffect(() => {
                 />
 
                 <NumericField
-                  label="Mida Y"
+                  label={t.palletDialog.sizeY}
                   value={form.sizeY}
                   onChange={(value) => {
                     updateNumericField(
@@ -827,7 +812,7 @@ useEffect(() => {
                 />
 
                 <NumericField
-                  label="Mida Z"
+                  label={t.palletDialog.sizeZ}
                   value={form.sizeZ}
                   onChange={(value) => {
                     updateNumericField(
@@ -836,6 +821,15 @@ useEffect(() => {
                     );
                   }}
                 />
+
+                {form.modelType === "IMPORTED_3D" && form.modelData && ["X", "Y", "Z"].map((axis) => {
+                  const key = `rotation${axis}`;
+                  return <NumericField key={key} label={`R${axis}`} value={form.modelData[key] ?? 0} onChange={async (value) => {
+                    const next = { ...form.modelData, [key]: Number(value) || 0 };
+                    const loaded = await loadTransformedStoredModel(next.modelId, next);
+                    setForm((current) => ({ ...current, sizeX: loaded.palletDimensions.sizeX, sizeY: loaded.palletDimensions.sizeY, sizeZ: loaded.palletDimensions.sizeZ, modelData: next }));
+                  }} />;
+                })}
               </div>
 
               <label
@@ -851,9 +845,8 @@ useEffect(() => {
                   fontWeight: 600
                 }}
               >
-                Color
-
-                <input
+              {t.palletDialog.color}
+            <input
                   type="color"
                   value={form.color}
                   onChange={(event) => {
@@ -893,8 +886,8 @@ useEffect(() => {
                   cursor: "pointer"
                 }}
               >
-                Guardar nom i característiques
-              </button>
+              {t.palletDialog.saveCharacteristics}
+            </button>
 
               {feedbackMessage && (
                 <div
@@ -922,7 +915,7 @@ useEffect(() => {
                 fontSize: "16px"
               }}
             >
-              Previsualització 3D
+              {t.palletDialog.preview3D}
             </h3>
 
             <PalletPreview
@@ -930,6 +923,8 @@ useEffect(() => {
               sizeY={previewSizeY}
               sizeZ={previewSizeZ}
               color={form.color}
+              modelType={form.modelType}
+              modelData={form.modelData}
             />
 
             <div
@@ -939,7 +934,7 @@ useEffect(() => {
                 fontSize: "13px"
               }}
             >
-              La superfície superior sempre correspon a Z WORLD = 0.
+              {t.palletDialog.surfaceHelp}
             </div>
           </div>
         </div>
@@ -969,8 +964,8 @@ useEffect(() => {
               cursor: "pointer"
             }}
           >
-            Cancel·lar
-          </button>
+              {t.common.cancel}
+            </button>
 
           <button
             type="button"
@@ -988,8 +983,8 @@ useEffect(() => {
               cursor: "pointer"
             }}
           >
-            Aplicar palet
-          </button>
+              {t.palletDialog.applyPallet}
+            </button>
         </div>
       </div>
     </div>

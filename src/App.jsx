@@ -4,7 +4,7 @@ import   { Canvas }   from   "@react-three/fiber";
 
 //controls de camera
 import { OrbitControls } from "@react-three/drei";
-import {useEffect, useRef, useState } from "react";
+import {useEffect,useMemo, useRef, useState } from "react";
 import Pallet from "./components/Pallet.jsx";
 import DraggablePiece from "./components/DraggablePiece.jsx";
 import NewPieceDialog from "./components/NewPieceDialog.jsx";
@@ -16,286 +16,58 @@ import OpenProjectDialog from "./components/OpenProjectDialog.jsx";
 import SaveProjectDialog from "./components/SaveProjectDialog.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
 import FloorGrid from "./components/FloorGrid.jsx";
-
-
-
+import GripperDialog from "./components/GripperDialog.jsx";
+import AppliedGripper from "./components/AppliedGripper.jsx";
+import SeparatorDialog from "./components/SeparatorDialog.jsx";
+import LayerConfigurator from "./components/LayerConfigurator.jsx";
+import UnsavedLayerDialog from "./components/UnsavedLayerDialog.jsx";
+import PalletizingConfigurator from "./components/PalletizingConfigurator.jsx";
+import PalletizedLayer from "./components/PalletizedLayer.jsx";
+import { buildPalletizingLayers } from "./utils/palletizingUtils.js";
 import {createProjectId, saveProject } from "./utils/projectStorage";
+import ReplicationPreview from "./components/ReplicationPreview.jsx";
+import { buildReplicationCandidates } from "./utils/pieceReplication.js";
+import SelectionRectangle from "./components/SelectionRectangle.jsx";
+import { getPieceIdsInsideRectangle } from "./utils/multiSelection.js";
+import PieceOrderIdLabels from "./components/PieceOrderIdLabels.jsx";
+import LayerOrderIdErrorDialog from "./components/LayerOrderIdErrorDialog.jsx";
+import { applyMagneticSnap } from "./utils/magneticSnap.js";
+import ViewCube from "./components/ViewCube.jsx";
+import {
+  panelSectionStyle,
+  panelInputStyle,
+  readOnlyInputStyle,
+  panelSelectStyle,
+  
+  panelRowStyle
+} from "./styles/appStyles.js";
+
+import {
+  getReferencePointOptions,
+  ensureOrderIds,
+  cloneLayerPieces,
+  getLayerPiecesSignature,
+  createLayerId,
+  createPalletizingInstanceId,
+  roundToThreeDecimals
+} from "./utils/appModelUtils.js";
+import useUndoRedoState from "./hooks/useUndoRedoState.js";
+
+import { getNextOrderId, normalizeOrderIdsAfterDeletion, getOrderIdValidation, createOrderIdErrorMessage} from "./utils/orderIdUtils.js";
+
+import { moveSelectionWithKeyboard } from "./utils/keyboardMovement.js";
+
+import ConfiguratorMenu from "./components/ConfiguratorMenu.jsx";
+import LanguageJokeButton from "./components/LanguageJokeButton.jsx";
+import PieceActionPanel from "./components/PieceActionPanel.jsx";
+
+import useTranslator from "./hooks/useTranslator.js";
+import useConfirmDialog from "./hooks/useConfirmDialog.js";
+
+import { loadAutosave, saveAutosave, clearAutosave } from "./utils/autosaveStorage.js";
 
 import { isPieceCollidingWithPallet, isPieceOutsidePallet, isPieceCollidingWithPiece } from "./utils/collision";
 import { getDisplayedCoordinates, displayedToCenterCoordinates, getReferenceRobotEuler, threeToPallet} from "./utils/pieceUtils";
-
-const REFERENCE_POINT_OPTIONS = [
-  {
-    value: "CENTER",
-    label: "CENTER"
-  },
-  {
-    value: "TOP_CENTER",
-    label: "TOP_CENTER"
-  },
-  {
-    value: "BOTTOM_CENTER",
-    label: "BOTTOM_CENTER"
-  },
-
-  /*
-    La geometria interna considera +X pallet
-    com FRONT.
-
-    Visualment, al teu pallet, aquest costat
-    correspon al que anomenes BACK.
-  */
-  {
-    value: "BACK_CENTER",
-    label: "FRONT_CENTER"
-  },
-  {
-    value: "FRONT_CENTER",
-    label: "BACK_CENTER"
-  },
-  {
-    value: "LEFT_CENTER",
-    label: "LEFT_CENTER"
-  },
-  {
-    value: "RIGHT_CENTER",
-    label: "RIGHT_CENTER"
-  }
-];
-
-function getReferencePointLabel(
-  referencePoint
-) {
-
-  const option =
-    REFERENCE_POINT_OPTIONS.find(
-      (item) =>
-        item.value ===
-        referencePoint
-    );
-
-  return (
-    option?.label ??
-    referencePoint
-  );
-
-}
-
-const panelSectionStyle = {
-  padding: "12px",
-  border: "1px solid #d7dce1",
-  borderRadius: "7px",
-  background: "#ffffff"
-};
-
-const panelFieldStyle = {
-  display: "flex",
-  flexDirection: "column",
-  gap: "3px",
-  marginBottom: "8px",
-  color: "#404850",
-  fontSize: "13px",
-  fontWeight: 600
-};
-
-const panelInputStyle = {
-  width: "100%",
-  height: "31px",
-  boxSizing: "border-box",
-  padding: "0 7px",
-  border: "1px solid #aeb6bf",
-  borderRadius: "5px",
-  background: "#ffffff",
-  color: "#20262c",
-  fontSize: "13px"
-};
-
-const readOnlyInputStyle = {
-  ...panelInputStyle,
-  background: "#eef1f4",
-  color: "#34404b",
-  cursor: "default"
-};
-
-const panelSelectStyle = {
-  width: "100%",
-  height: "33px",
-  boxSizing: "border-box",
-  padding: "0 7px",
-  border: "1px solid #aeb6bf",
-  borderRadius: "5px",
-  background: "#ffffff",
-  color: "#20262c",
-  fontSize: "13px",
-  cursor: "pointer"
-};
-
-const panelButtonStyle = {
-  flex: 1,
-  minWidth: 0,
-  height: "34px",
-  boxSizing: "border-box",
-  padding: "0 8px",
-  border: "1px solid #aeb6bf",
-  borderRadius: "6px",
-  background: "#f7f8fa",
-  color: "#303840",
-  fontSize: "12px",
-  fontWeight: 600,
-  cursor: "pointer",
-  whiteSpace: "nowrap",
-  boxShadow:
-    "0 1px 2px rgba(0, 0, 0, 0.08)"
-};
-
-
-const panelRowStyle = {
-  display: "grid",
-  gridTemplateColumns: "92px minmax(0, 1fr)",
-  alignItems: "center",
-  gap: "8px",
-  marginBottom: "7px",
-  color: "#404850",
-  fontSize: "13px",
-  fontWeight: 600
-};
-
-
-
-
-
-
-const AUTOSAVE_STORAGE_KEY =
-  "pallet-simulator-composition";
-
-function loadAutosave() {
-  try {
-    const savedValue =
-      window.localStorage.getItem(
-        AUTOSAVE_STORAGE_KEY
-      );
-
-    if (!savedValue) {
-      return null;
-    }
-
-    const parsedValue =
-      JSON.parse(savedValue);
-
-    if (
-      !parsedValue ||
-      typeof parsedValue !== "object"
-    ) {
-      return null;
-    }
-
-    const savedPieces =
-      Array.isArray(
-        parsedValue.pieces
-      )
-        ? parsedValue.pieces
-        : [];
-
-    const savedPallet =
-      parsedValue.activePallet &&
-      typeof parsedValue.activePallet ===
-        "object"
-        ? parsedValue.activePallet
-        : null;
-
-    return {
-      pieces: savedPieces,
-
-      activePallet:
-        savedPallet,
-
-      selectedPieceId:
-        parsedValue.selectedPieceId ??
-        null,
-
-      activeProject:
-        parsedValue.activeProject &&
-        typeof parsedValue.activeProject ===
-          "object"
-          ? parsedValue.activeProject
-          : null,
-
-      savedAt:
-        parsedValue.savedAt ??
-        null
-    };
-  } catch (error) {
-    console.error(
-      "No s'ha pogut carregar la còpia de recuperació:",
-      error
-    );
-
-    return null;
-  }
-}
-
-
-
-
-function saveAutosave(
-  pieces,
-  activePallet,
-  selectedPieceId,
-  activeProject
-) {
-  try {
-    const autosaveData = {
-      version: 1,
-
-      savedAt:
-        new Date().toISOString(),
-
-      pieces,
-
-      activePallet,
-
-      selectedPieceId,
-
-      activeProject
-    };
-
-    window.localStorage.setItem(
-      AUTOSAVE_STORAGE_KEY,
-      JSON.stringify(
-        autosaveData
-      )
-    );
-
-    return true;
-  } catch (error) {
-    console.error(
-      "No s'ha pogut guardar la còpia de recuperació:",
-      error
-    );
-
-    return false;
-  }
-}
-
-
-const configuratorButtonStyle = {
-  width: "100%",
-  height: "34px",
-  boxSizing: "border-box",
-  padding: "0 10px",
-  border: "1px solid #aeb6bf",
-  borderRadius: "6px",
-  background: "#ffffff",
-  color: "#303840",
-  fontSize: "12px",
-  fontWeight: 700,
-  textAlign: "left",
-  cursor: "pointer",
-  boxShadow:
-    "0 1px 2px rgba(0, 0, 0, 0.08)"
-};
-
-
 
 
 
@@ -303,11 +75,50 @@ const configuratorButtonStyle = {
 
 export default function App() {
   
+const {
+  t,
+  activeLanguage,
+  setActiveLanguage,
+  availableLanguages
+} = useTranslator("ca");
+
+const {
+  confirmDialog,
+  openConfirmDialog,
+  closeConfirmDialog,
+  confirmDialogAction
+} = useConfirmDialog();
 
   const [
   selectedPieceId,
   setSelectedPieceId
 ] = useState(null);
+
+const [
+  selectedPieceIds,
+  setSelectedPieceIds
+] = useState([]);
+
+const [
+  selectionRectangle,
+  setSelectionRectangle
+] = useState(null);
+
+const [
+  groupMoveX,
+  setGroupMoveX
+] = useState("");
+
+const [
+  groupMoveY,
+  setGroupMoveY
+] = useState("");
+
+
+const [
+  isRectangleSelectionArmed,
+  setIsRectangleSelectionArmed
+] = useState(false);
 
   const [
     isDragging,
@@ -324,7 +135,29 @@ export default function App() {
     setIsPalletDialogOpen
   ] = useState(false);
 
-  const [
+const [
+  isGripperDialogOpen,
+  setIsGripperDialogOpen
+] = useState(false);
+
+const [
+  isSeparatorDialogOpen,
+  setIsSeparatorDialogOpen
+] = useState(false);
+
+const [
+  activeGripper,
+  setActiveGripper
+] = useState(null);
+
+
+const [
+  isGripperVisible,
+  setIsGripperVisible
+] = useState(false);
+
+
+const [
   isOpenProjectDialogOpen,
   setIsOpenProjectDialogOpen
 ] = useState(false);
@@ -350,15 +183,29 @@ const [
 ] = useState("");
 
 const [
-  confirmDialog,
-  setConfirmDialog
-] = useState({
-  open: false,
-  title: "",
-  message: "",
-  confirmLabel: "Confirmar",
-  destructive: false
-});
+  replicationPreview,
+  setReplicationPreview
+] = useState(null);
+
+const replicationPreviewRef =
+  useRef(null);
+const sceneCameraRef =
+  useRef(null);
+
+const orbitControlsRef =
+  useRef(null);
+
+
+const canvasElementRef =
+  useRef(null);
+
+const groupDragRef =
+  useRef(null);
+
+const selectionRectangleRef =
+  useRef(null);
+
+
 
   const [
     inputX,
@@ -390,10 +237,25 @@ const [
     setInputRZ
   ] = useState("");
 
-  const [
-  pieces,
-  setPieces
-] = useState([]);
+  const {
+  state: pieces,
+  setState: setPieces,
+  undo: undoPieces,
+  redo: redoPieces,
+  beginTransaction:
+    beginPiecesTransaction,
+  endTransaction:
+    endPiecesTransaction,
+  cancelTransaction:
+    cancelPiecesTransaction,
+  resetHistory:
+    resetPiecesHistory
+} = useUndoRedoState(
+  [],
+  {
+    historyLimit: 100
+  }
+);
 
   const [
   activePallet,
@@ -402,15 +264,55 @@ const [
   ...PALLET_CONFIG
 }));
 
+const orbitTarget =
+  useMemo(
+    () => [
+      0,
+      -Number(
+        activePallet.sizeZ
+      ) / 2,
+      0
+    ],
+    [
+      activePallet.sizeZ
+    ]
+  );
+
+// CAMERA_TARGET_SYNC_PALLET_CENTER
+useEffect(() => {
+  const controls =
+    orbitControlsRef.current;
+
+  if (!controls) {
+    return;
+  }
+
+  /*
+    OrbitControls conserva internament el target.
+    Actualitzar nomes la prop target no sempre
+    substitueix el valor intern despres de canvis
+    de projecte, palet o ViewCube.
+  */
+  controls.target.set(
+    Number(orbitTarget[0]) || 0,
+    Number(orbitTarget[1]) || 0,
+    Number(orbitTarget[2]) || 0
+  );
+
+  controls.update();
+}, [
+  orbitTarget
+]);
 
   const [
-    activeProject,
-    setActiveProject
-  ] = useState({
-    id: null,
-    name: "Projecte sense nom",
-    createdAt: null
-  });
+  activeProject,
+  setActiveProject
+] = useState(() => ({
+  id: null,
+  name:
+    t.project.unnamed,
+  createdAt: null
+}));
 
   const [
     hasUnsavedChanges,
@@ -422,12 +324,92 @@ const [
   setHasHandledAutosaveRecovery
 ] = useState(false);
 
+const [
+  layers,
+  setLayers
+] = useState([]);
+
+const [
+  activeLayerId,
+  setActiveLayerId
+] = useState(null);
+
+const [
+  layerName,
+  setLayerName
+] = useState("");
+
+const [
+  pendingLayerId,
+  setPendingLayerId
+] = useState(null);
+
+const [
+  isPendingNewLayer,
+  setIsPendingNewLayer
+] = useState(false);
+
+const [
+  isUnsavedLayerDialogOpen,
+  setIsUnsavedLayerDialogOpen
+] = useState(false);
 
 
-  /*
-    Aquesta referència ha d'estar dins
-    del component App.
-  */
+const [
+  showOrderIds,
+  setShowOrderIds
+] = useState(false);
+
+const [
+  showGripperOffsets,
+  setShowGripperOffsets
+] = useState(false);
+
+const [
+  gripperOffsetPreviewMode,
+  setGripperOffsetPreviewMode
+] = useState(null);
+
+const [
+  currentLayerGripperOffsets,
+  setCurrentLayerGripperOffsets
+] = useState({
+  approach: {
+    x: 0,
+    y: 0,
+    z: 0
+  },
+  retreat: {
+    x: 0,
+    y: 0,
+    z: 0
+  }
+});
+
+const [
+  orderIdErrorDialog,
+  setOrderIdErrorDialog
+] = useState({
+  open: false,
+  message: ""
+});
+
+
+
+
+
+
+
+
+ const [
+  palletizingSequence,
+  setPalletizingSequence
+] = useState([]);
+
+const [
+  selectedPalletizingInstanceId,
+  setSelectedPalletizingInstanceId
+] = useState(null);
   
 const hasCompletedInitialRender =
   useRef(false);
@@ -435,26 +417,16 @@ const hasCompletedInitialRender =
 const suppressNextChangeDetection =
   useRef(false);
 
-const confirmActionRef =
-  useRef(null);
-
+const isSavingProjectRef =
+  useRef(false);
 
 function applyRecoveredAutosave(
   autosaveData
 ) {
-  
-  
-
   const recoveredPieces =
-    Array.isArray(
-      autosaveData.pieces
-    )
-      ? autosaveData.pieces.map(
-          (piece) => ({
-            ...piece
-          })
-        )
-      : [];
+  ensureOrderIds(
+    autosaveData.pieces
+  );
 
   const recoveredPallet =
     autosaveData.activePallet
@@ -465,6 +437,72 @@ function applyRecoveredAutosave(
           ...PALLET_CONFIG
         };
 
+  const recoveredLayers =
+    Array.isArray(
+      autosaveData.layers
+    )
+      ? autosaveData.layers.map(
+          (layer) => ({
+            ...layer,
+
+            pieces:
+              ensureOrderIds(
+              layer.pieces
+            )
+          })
+        )
+      : [];
+
+  const recoveredPalletizingSequence =
+    Array.isArray(
+      autosaveData.palletizingSequence
+    )
+      ? autosaveData
+          .palletizingSequence
+          .filter(
+            (item) =>
+              recoveredLayers.some(
+                (layer) =>
+                  layer.id ===
+                  item.sourceLayerId
+              )
+          )
+          .map(
+            (item) => ({
+              ...item
+            })
+          )
+      : [];
+
+  setPalletizingSequence(
+    recoveredPalletizingSequence
+  );
+
+  setSelectedPalletizingInstanceId(
+    null
+  );
+
+  setLayers(
+    recoveredLayers
+  );
+
+const recoveredActiveLayer =
+  recoveredLayers.find(
+    (layer) =>
+      layer.id ===
+      autosaveData.activeLayerId
+  ) ?? null;
+
+setActiveLayerId(
+  recoveredActiveLayer?.id ??
+  null
+);
+
+setLayerName(
+  recoveredActiveLayer?.name ??
+  ""
+);
+
   const recoveredSelectedPieceId =
     recoveredPieces.some(
       (piece) =>
@@ -474,16 +512,31 @@ function applyRecoveredAutosave(
       ? autosaveData.selectedPieceId
       : null;
 
-  setPieces(
-    recoveredPieces
-  );
+  resetPiecesHistory(
+  recoveredPieces
+);
 
   setActivePallet(
     recoveredPallet
   );
 
-  setSelectedPieceId(
+  if (
+  recoveredSelectedPieceId !==
+  null
+) {
+  applyPieceSelection([
     recoveredSelectedPieceId
+  ]);
+} else {
+  clearPieceSelection();
+}
+
+  setActiveGripper(
+    autosaveData.activeGripper
+      ? {
+         ...autosaveData.activeGripper
+       }
+      : null
   );
 
   if (
@@ -496,7 +549,7 @@ function applyRecoveredAutosave(
 
       name:
         autosaveData.activeProject.name ??
-        "Projecte recuperat",
+        t.project.recovered,
 
       createdAt:
         autosaveData.activeProject.createdAt ??
@@ -505,13 +558,21 @@ function applyRecoveredAutosave(
   } else {
     setActiveProject({
       id: null,
-      name: "Projecte recuperat",
+      name: t.project.recovered,
       createdAt: null
     });
   }
 
   setHasUnsavedChanges(true);
 }
+
+
+
+
+
+
+
+
 
 /*
   1. Comprova si existeix una sessió
@@ -558,9 +619,8 @@ useEffect(() => {
     hasDifferentPallet;
 
   if (!hasRecoverableContent) {
-    window.localStorage.removeItem(
-      AUTOSAVE_STORAGE_KEY
-    );
+    clearAutosave();
+
 
     setHasHandledAutosaveRecovery(
       true
@@ -569,9 +629,32 @@ useEffect(() => {
     return;
   }
 
+  /* AUTOSAVE_RECOVERY_PROMPT_GLOBAL_GUARD */
+  if (
+    window.__palletAutosaveRecoveryPromptHandled ===
+    true
+  ) {
+    setHasHandledAutosaveRecovery(
+      true
+    );
+
+    return;
+  }
+
+  /*
+    La marca es posa ABANS d'obrir el confirm.
+    Així, una segona execució simultània de
+    l'efecte no pot obrir un altre popup.
+
+    En recarregar la pàgina es crea un nou
+    objecte window i la marca torna a començar.
+  */
+  window.__palletAutosaveRecoveryPromptHandled =
+    true;
+
   const shouldRecover =
     window.confirm(
-      "S'ha trobat una sessió anterior sense guardar. Vols recuperar-la?"
+      t.project.previousSession
     );
 
   if (shouldRecover) {
@@ -579,9 +662,8 @@ useEffect(() => {
       autosaveData
     );
   } else {
-    window.localStorage.removeItem(
-      AUTOSAVE_STORAGE_KEY
-    );
+    clearAutosave();
+
   }
 
   setHasHandledAutosaveRecovery(
@@ -624,40 +706,26 @@ useEffect(() => {
 
   setHasUnsavedChanges(true);
 
-  saveAutosave(
-    pieces,
-    activePallet,
-    selectedPieceId,
-    activeProject
-  );
+  saveAutosave({
+  pieces,
+  activePallet,
+  activeGripper,
+  layers,
+  activeLayerId,
+  palletizingSequence,
+  selectedPieceId,
+  activeProject
+});
+
 }, [
   pieces,
-  activePallet
+  activePallet,
+  activeGripper,
+  layers,
+  activeLayerId,
+  palletizingSequence,
 ]);
 
-
-/*
-  Actualitza la peça seleccionada dins de
-  la còpia de recuperació existent.
-*/
-useEffect(() => {
-  if (!hasHandledAutosaveRecovery) {
-    return;
-  }
-
-  if (!hasUnsavedChanges) {
-    return;
-  }
-
-  saveAutosave(
-    pieces,
-    activePallet,
-    selectedPieceId,
-    activeProject
-  );
-}, [
-  selectedPieceId
-]);
 
 
 /*
@@ -670,12 +738,16 @@ useEffect(() => {
       return;
     }
 
-    saveAutosave(
-      pieces,
-      activePallet,
-      selectedPieceId,
-      activeProject
-    );
+    saveAutosave({
+  pieces,
+  activePallet,
+  activeGripper,
+  layers,
+  activeLayerId,
+  palletizingSequence,
+  selectedPieceId,
+  activeProject
+});
   }
 
   window.addEventListener(
@@ -692,6 +764,10 @@ useEffect(() => {
 }, [
   pieces,
   activePallet,
+  activeGripper,
+  layers,
+  activeLayerId,
+  palletizingSequence,
   selectedPieceId,
   activeProject,
   hasUnsavedChanges
@@ -709,8 +785,102 @@ useEffect(() => {
         selectedPieceId
     );
 
+const effectiveGripperOffsets =
+  selectedData?.gripperOffsets ??
+  currentLayerGripperOffsets;
+
+const activeGripperOffsetPreview =
+  gripperOffsetPreviewMode
+    ? effectiveGripperOffsets[
+        gripperOffsetPreviewMode
+      ] ?? null
+    : null;
+
+const shouldShowAppliedGripper =
+  isGripperVisible ||
+  Boolean(
+    gripperOffsetPreviewMode
+  );
+
+    const activeLayer =
+  layers.find(
+    (layer) =>
+      layer.id ===
+      activeLayerId
+  ) ?? null;
+
+const currentLayerSignature =
+  getLayerPiecesSignature(
+    pieces
+  );
+
+const savedLayerSignature =
+  activeLayer
+    ? getLayerPiecesSignature(
+        activeLayer.pieces
+      )
+    : null;
+
+const isCurrentLayerDirty =
+  activeLayer
+    ? currentLayerSignature !==
+      savedLayerSignature
+    : pieces.length > 0;
+
+const orderIdValidation =
+  useMemo(
+    () =>
+      getOrderIdValidation(
+        pieces
+      ),
+    [
+      pieces
+    ]
+  );
+
+  const palletizedLayerInstances =
+  useMemo(
+    () =>
+      buildPalletizingLayers(
+        palletizingSequence,
+        layers
+      ),
+    [
+      palletizingSequence,
+      layers
+    ]
+  );
+
+  const selectedIsSeparator =
+  selectedData?.pieceCategory ===
+  "SEPARATOR";
+
+const selectedIsRegularPiece =
+  Boolean(
+    selectedData &&
+    !selectedIsSeparator
+  );
+
+const shouldShowSelectedData =
+  selectedData &&
+  (
+    (
+      activeConfigurator ===
+      "pieces" &&
+      selectedIsRegularPiece
+    ) ||
+    (
+      activeConfigurator ===
+      "separators" &&
+      selectedIsSeparator
+    )
+  );
+
 useEffect(() => {
-  function handleGlobalKeyDown(event) {
+  
+  function handleGlobalKeyDown(
+    event
+  ) {
     const activeElement =
       document.activeElement;
 
@@ -721,88 +891,217 @@ useEffect(() => {
         HTMLTextAreaElement ||
       activeElement instanceof
         HTMLSelectElement ||
-      activeElement?.isContentEditable ===
+      activeElement
+        ?.isContentEditable ===
         true;
 
     /*
-      Si s'està editant un camp,
-      no executem les dreceres globals.
+      No executem dreceres mentre
+      s'està editant un camp.
     */
     if (isWritingInField) {
       return;
     }
 
-    /*
-      Detectem automàticament qualsevol
-      popup modal obert.
-
-      Això inclou:
-      - Nova peça
-      - Configurar palet
-      - Obrir projecte
-      - Guardar projecte
-      - Confirmacions
-      - Qualsevol popup futur
-    */
     const openDialog =
       document.querySelector(
         '[role="dialog"][aria-modal="true"]'
       );
 
+      
+
     if (openDialog) {
       return;
     }
 
-    /*
-      Escape deselecciona la peça.
-    */
-    if (event.key === "Escape") {
-      if (selectedPieceId === null) {
-        return;
-      }
+const pressedKey =
+  event.key.toLowerCase();
 
+const isUndoShortcut =
+  event.ctrlKey &&
+  !event.shiftKey &&
+  pressedKey === "z";
+
+const isRedoShortcut =
+  event.ctrlKey &&
+  (
+    pressedKey === "y" ||
+    (
+      event.shiftKey &&
+      pressedKey === "z"
+    )
+  );
+
+if (isUndoShortcut) {
+  event.preventDefault();
+
+  undoPieces();
+
+  return;
+}
+
+if (isRedoShortcut) {
+  event.preventDefault();
+
+  redoPieces();
+
+  return;
+}
+
+
+    const keyboardMoveHandled =
+  moveSelectionWithKeyboard({
+    event,
+    selectedPieceIds,
+    setPieces
+  });
+
+if (
+  keyboardMoveHandled
+) {
+  return;
+}
+
+    /*
+      Seleccionar totes les peces
+      i separadors de la composició.
+    */
+    if (
+      event.ctrlKey &&
+      event.key.toLowerCase() ===
+        "a" &&
+      activeConfigurator !==
+        "palletizing"
+    ) {
       event.preventDefault();
 
-      setSelectedPieceId(null);
-
-      setInputX("");
-      setInputY("");
-      setInputZ("");
-      setInputRX("");
-      setInputRY("");
-      setInputRZ("");
+      applyPieceSelection(
+        pieces.map(
+          (piece) =>
+            piece.id
+        )
+      );
 
       return;
     }
 
     /*
-      Delete correspon habitualment
-      a la tecla Supr.
+      Dreceres específiques del
+      configurador de paletitzat.
     */
-    if (event.key === "Delete") {
-      if (selectedPieceId === null) {
+    if (
+      activeConfigurator ===
+      "palletizing"
+    ) {
+      if (
+        event.key ===
+        "Escape"
+      ) {
+        if (
+          selectedPalletizingInstanceId ===
+          null
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+
+        setSelectedPalletizingInstanceId(
+          null
+        );
+
+        return;
+      }
+
+
+
+      if (
+        event.key ===
+        "Delete"
+      ) {
+        if (
+          selectedPalletizingInstanceId ===
+          null
+        ) {
+          return;
+        }
+
+        event.preventDefault();
+
+        deletePalletizingLayer(
+          selectedPalletizingInstanceId
+        );
+
+        return;
+      }
+
+      return;
+    }
+
+    /*
+      Escape cancel·la el rectangle
+      o neteja la selecció.
+    */
+    if (
+      event.key ===
+      "Escape"
+    ) {
+      if (
+        selectionRectangleRef.current
+      ) {
+        event.preventDefault();
+
+        selectionRectangleRef.current =
+          null;
+
+        setSelectionRectangle(
+          null
+        );
+
+        setIsDragging(
+          false
+        );
+
+        return;
+      }
+
+      if (
+        selectedPieceIds.length ===
+        0
+      ) {
         return;
       }
 
       event.preventDefault();
 
-      setPieces(
-        (currentPieces) =>
-          currentPieces.filter(
-            (piece) =>
-              piece.id !==
-              selectedPieceId
-          )
-      );
+      clearPieceSelection();
 
-      setSelectedPieceId(null);
+      return;
+    }
 
-      setInputX("");
-      setInputY("");
-      setInputZ("");
-      setInputRX("");
-      setInputRY("");
-      setInputRZ("");
+    /*
+      Supr elimina totes les peces i
+      separadors seleccionats.
+
+      Després, els orderId restants
+      es renumeren automàticament.
+    */
+    if (
+      event.key ===
+      "Delete"
+    ) {
+      if (
+        selectedPieceIds.length ===
+        0
+      ) {
+        return;
+      }
+
+      event.preventDefault();
+
+      deleteSelectedPieces();
+
+      return;
     }
   }
 
@@ -818,9 +1117,16 @@ useEffect(() => {
     );
   };
 }, [
-  selectedPieceId
+  activeConfigurator,
+  pieces,
+  selectedPieceIds,
+  selectedPalletizingInstanceId,
+  undoPieces,
+  redoPieces,
+  setPieces
 ]);
-``
+
+
 
 const referenceEuler =
   selectedData
@@ -839,9 +1145,29 @@ if (selectedData) {
 
   const displayed =
     getDisplayedCoordinates(selectedData);
-    setInputX(String(displayed.x));
-    setInputY(String(displayed.y));
-    setInputZ(String(displayed.z));
+    setInputX(
+      String(
+        roundToThreeDecimals(
+          displayed.x
+        )
+      )
+    );
+
+    setInputY(
+      String(
+        roundToThreeDecimals(
+          displayed.y
+        )
+      )
+    );
+
+    setInputZ(
+      String(
+        roundToThreeDecimals(
+          displayed.z
+        )
+      )
+    );
     setInputRX(String(selectedData.rxDeg));
     setInputRY(String(selectedData.ryDeg));
     setInputRZ(String(selectedData.rzDeg));
@@ -858,6 +1184,118 @@ if (selectedData) {
   selectedData?.faceOffsetX,
   selectedData?.faceOffsetY
 ]);
+
+useEffect(() => {
+  function handlePointerMove(
+    event
+  ) {
+    const currentRectangle =
+      selectionRectangleRef.current;
+
+    if (!currentRectangle) {
+      return;
+    }
+
+    const nextRectangle = {
+      ...currentRectangle,
+      currentX:
+        event.clientX,
+      currentY:
+        event.clientY
+    };
+
+    selectionRectangleRef.current =
+      nextRectangle;
+
+    setSelectionRectangle(
+      nextRectangle
+    );
+  }
+
+  function handlePointerUp() {
+    const currentRectangle =
+      selectionRectangleRef.current;
+
+    if (!currentRectangle) {
+      return;
+    }
+
+    const width =
+      Math.abs(
+        currentRectangle.currentX -
+        currentRectangle.startX
+      );
+
+    const height =
+      Math.abs(
+        currentRectangle.currentY -
+        currentRectangle.startY
+      );
+
+    if (
+      width >= 4 ||
+      height >= 4
+    ) {
+      const selectedIds =
+        getPieceIdsInsideRectangle({
+          pieces,
+          rectangle:
+            currentRectangle,
+          camera:
+            sceneCameraRef.current,
+          canvasElement:
+            canvasElementRef.current
+        });
+
+      applyPieceSelection(
+        selectedIds
+      );
+    }
+
+    selectionRectangleRef.current =
+      null;
+
+    setSelectionRectangle(
+      null
+    );
+
+    setIsDragging(false);
+  }
+
+  window.addEventListener(
+    "pointermove",
+    handlePointerMove
+  );
+
+  window.addEventListener(
+    "pointerup",
+    handlePointerUp
+  );
+
+  return () => {
+    window.removeEventListener(
+      "pointermove",
+      handlePointerMove
+    );
+
+    window.removeEventListener(
+      "pointerup",
+      handlePointerUp
+    );
+  };
+}, [
+  pieces
+]);
+
+
+
+
+
+
+
+
+
+
 
 function updatePieceField(field, value) {
   if (value === "") return;
@@ -937,10 +1375,7 @@ function updateDisplayedCoordinates(
   );
 }
 
-// Arrodoneix un valor a un màxim de 3 decimals
-function roundToThreeDecimals(value) {
-  return Math.round((value + Number.EPSILON) * 1000) / 1000;
-}
+
 
 // Actualitza la posició d'una peça durant l'arrossegament
 function movePiece(
@@ -948,33 +1383,613 @@ function movePiece(
   threeX,
   threeZ
 ) {
-
-  const pallet =
+  const targetPosition =
     threeToPallet(
       threeX,
       0,
       threeZ
     );
 
-  setPieces((currentPieces) =>
-    currentPieces.map((piece) =>
-      piece.id === pieceId
-        ? {
-            ...piece,
+  const dragData =
+    groupDragRef.current;
 
-            x: roundToThreeDecimals(
-              pallet.x
-            ),
+  if (
+    !dragData ||
+    dragData.sourcePieceId !==
+      pieceId
+  ) {
+    setPieces(
+      (currentPieces) =>
+        currentPieces.map(
+          (piece) =>
+            piece.id === pieceId
+              ? {
+                  ...piece,
 
-            y: roundToThreeDecimals(
-              pallet.y
+                  x:
+                    roundToThreeDecimals(
+                      targetPosition.x
+                    ),
+
+                  y:
+                    roundToThreeDecimals(
+                      targetPosition.y
+                    )
+                }
+              : piece
+        )
+    );
+
+    return;
+  }
+
+  const deltaX =
+    targetPosition.x -
+    dragData.startPalletX;
+
+  const deltaY =
+    targetPosition.y -
+    dragData.startPalletY;
+
+  const movingIdSet =
+    new Set(
+      dragData.movingPieceIds
+    );
+
+  setPieces(
+    (currentPieces) =>
+      currentPieces.map(
+        (piece) => {
+          if (
+            !movingIdSet.has(
+              piece.id
             )
-
+          ) {
+            return piece;
           }
-        : piece
+
+          const initialPosition =
+            dragData.initialPositions.get(
+              piece.id
+            );
+
+          if (!initialPosition) {
+            return piece;
+          }
+
+         const movedPiece = {
+  ...piece,
+
+  x:
+    roundToThreeDecimals(
+      initialPosition.x +
+      deltaX
+    ),
+
+  y:
+    roundToThreeDecimals(
+      initialPosition.y +
+      deltaY
     )
+};
+
+const snappedPiece =
+  applyMagneticSnap({
+    movingPiece:
+      movedPiece,
+
+    allPieces:
+      currentPieces,
+
+    excludedPieceIds:
+      dragData.movingPieceIds
+  });
+
+return {
+  ...snappedPiece,
+
+  x:
+    roundToThreeDecimals(
+      snappedPiece.x
+    ),
+
+  y:
+    roundToThreeDecimals(
+      snappedPiece.y
+    ),
+
+  z:
+    roundToThreeDecimals(
+      snappedPiece.z
+    )
+};
+
+        }
+      )
   );
 }
+
+function finishPieceDrag() {
+  endPiecesTransaction();
+
+  groupDragRef.current = null;
+
+  setIsDragging(false);
+}
+
+function startRectangleSelection(
+  clientX,
+  clientY
+) {
+  cancelPieceReplication();
+
+  const nextRectangle = {
+    startX: clientX,
+    startY: clientY,
+    currentX: clientX,
+    currentY: clientY
+  };
+
+  selectionRectangleRef.current =
+    nextRectangle;
+
+  setSelectionRectangle(
+    nextRectangle
+  );
+
+  setIsDragging(true);
+}
+
+function handleCanvasPointerDown(
+  event
+) {
+  if (
+    activeConfigurator ===
+    "palletizing"
+  ) {
+    return;
+  }
+
+  const nativeEvent =
+    event.nativeEvent ??
+    event.sourceEvent ??
+    event;
+
+  /*
+    Si el pointerDown ha començat sobre una
+    peça o separador, DraggablePiece ja ha
+    gestionat la selecció.
+
+    El Canvas no ha de deseleccionar-la ni
+    començar un rectangle.
+  */
+  if (
+    nativeEvent.piecePointerHandled ===
+    true
+  ) {
+    return;
+  }
+
+  const shouldStartRectangle =
+  nativeEvent.ctrlKey ||
+  isRectangleSelectionArmed;
+
+if (!shouldStartRectangle) {
+  /*
+    No eliminem la selecció quan el
+    pointerDown comença al fons.
+
+    OrbitControls utilitza aquest mateix
+    esdeveniment per girar i desplaçar
+    la càmera.
+  */
+  return;
+}
+
+  nativeEvent.preventDefault();
+
+  setIsRectangleSelectionArmed(
+    false
+  );
+
+  startRectangleSelection(
+    nativeEvent.clientX,
+    nativeEvent.clientY
+  );
+}
+
+function handleCanvasDoubleClick(
+  event
+) {
+  if (
+    activeConfigurator ===
+    "palletizing"
+  ) {
+    return;
+  }
+
+  const nativeEvent =
+    event.nativeEvent ??
+    event.sourceEvent ??
+    event;
+
+  if (
+    nativeEvent.piecePointerHandled ===
+    true
+  ) {
+    return;
+  }
+
+  setIsRectangleSelectionArmed(
+    true
+  );
+}
+
+function startPieceReplication(
+  pieceId,
+  startThreeX,
+  startThreeZ
+) {
+  const sourcePiece =
+    pieces.find(
+      (piece) =>
+        piece.id === pieceId
+    );
+
+  if (
+    !sourcePiece ||
+    sourcePiece.pieceCategory ===
+      "SEPARATOR"
+  ) {
+    return;
+  }
+
+  updateReplicationPreview({
+    sourcePieceId: pieceId,
+    startThreeX,
+    startThreeZ,
+    currentThreeX:
+      startThreeX,
+    currentThreeZ:
+      startThreeZ,
+    candidates: []
+  });
+}
+
+function movePieceReplication(
+  currentThreeX,
+  currentThreeZ
+) {
+  const currentPreview =
+    replicationPreviewRef.current;
+
+  if (!currentPreview) {
+    return;
+  }
+
+  const sourcePiece =
+    pieces.find(
+      (piece) =>
+        piece.id ===
+        currentPreview.sourcePieceId
+    );
+
+  if (!sourcePiece) {
+    updateReplicationPreview(
+      null
+    );
+
+    return;
+  }
+
+  const rawCandidates =
+    buildReplicationCandidates({
+      sourcePiece,
+
+      startThreeX:
+        currentPreview.startThreeX,
+
+      startThreeZ:
+        currentPreview.startThreeZ,
+
+      currentThreeX,
+      currentThreeZ
+    });
+
+  const candidates =
+    rawCandidates.map(
+      (
+        candidate,
+        candidateIndex
+      ) => {
+        const collidesWithExistingPiece =
+          pieces.some(
+            (existingPiece) =>
+              isPieceCollidingWithPiece(
+                candidate.piece,
+                existingPiece
+              )
+          );
+
+        const collidesWithPreviewPiece =
+          rawCandidates.some(
+            (
+              otherCandidate,
+              otherIndex
+            ) =>
+              otherIndex !==
+                candidateIndex &&
+              isPieceCollidingWithPiece(
+                candidate.piece,
+                otherCandidate.piece
+              )
+          );
+
+        const collidesWithPallet =
+          isPieceCollidingWithPallet(
+            candidate.piece,
+            activePallet
+          );
+
+        return {
+          ...candidate,
+
+          colliding:
+            collidesWithExistingPiece ||
+            collidesWithPreviewPiece ||
+            collidesWithPallet
+        };
+      }
+    );
+
+  updateReplicationPreview({
+    ...currentPreview,
+    currentThreeX,
+    currentThreeZ,
+    candidates
+  });
+}
+
+function finishPieceReplication() {
+  const currentPreview =
+    replicationPreviewRef.current;
+
+  if (
+    !currentPreview ||
+    currentPreview.candidates.length ===
+      0
+  ) {
+    updateReplicationPreview(
+      null
+    );
+
+    return;
+  }
+
+  setPieces(
+    (currentPieces) => {
+      const numericIds =
+        currentPieces
+          .map(
+            (piece) =>
+              Number(piece.id)
+          )
+          .filter(
+            (pieceId) =>
+              Number.isFinite(
+                pieceId
+              )
+          );
+
+      let nextId =
+        numericIds.length === 0
+          ? 1
+          : Math.max(
+              ...numericIds
+            ) + 1;
+      let nextOrderId =
+        getNextOrderId(
+          currentPieces
+        );
+
+      const definitiveCopies =
+        currentPreview.candidates.map(
+          (candidate) => {
+      const definitivePiece = {
+        ...candidate.piece,
+
+        id:
+          nextId,
+
+        orderId:
+          nextOrderId
+      };
+
+            nextId += 1;
+            nextOrderId += 1;
+            return definitivePiece;
+          }
+        );
+
+      return [
+        ...currentPieces,
+        ...definitiveCopies
+      ];
+    }
+  );
+
+  updateReplicationPreview(
+    null
+  );
+}
+
+function cancelPieceReplication() {
+  updateReplicationPreview(
+    null
+  );
+}
+
+function clearPieceSelection() {
+  setSelectedPieceIds([]);
+  setSelectedPieceId(null);
+
+  setInputX("");
+  setInputY("");
+  setInputZ("");
+  setInputRX("");
+  setInputRY("");
+  setInputRZ("");
+}
+
+function applyPieceSelection(
+  pieceIds
+) {
+  const uniqueIds =
+    Array.from(
+      new Set(pieceIds)
+    );
+
+  setSelectedPieceIds(
+    uniqueIds
+  );
+
+  setSelectedPieceId(
+    uniqueIds.length === 1
+      ? uniqueIds[0]
+      : null
+  );
+}
+
+function selectPiece(
+  pieceId,
+  additive = false
+) {
+  if (!additive) {
+    applyPieceSelection([
+      pieceId
+    ]);
+
+    return;
+  }
+
+  setSelectedPieceIds(
+    (currentIds) => {
+      const alreadySelected =
+        currentIds.includes(
+          pieceId
+        );
+
+      const nextIds =
+        alreadySelected
+          ? currentIds.filter(
+              (currentId) =>
+                currentId !==
+                pieceId
+            )
+          : [
+              ...currentIds,
+              pieceId
+            ];
+
+      setSelectedPieceId(
+        nextIds.length === 1
+          ? nextIds[0]
+          : null
+      );
+
+      return nextIds;
+    }
+  );
+}
+
+function startPieceDrag(
+  pieceId,
+  startThreeX,
+  startThreeZ
+) {
+  beginPiecesTransaction();
+
+  const sourcePiece =
+    pieces.find(
+      (piece) =>
+        piece.id === pieceId
+    );
+
+  if (!sourcePiece) {
+    endPiecesTransaction();
+    return;
+}
+
+  const movingPieceIds =
+    selectedPieceIds.includes(
+      pieceId
+    )
+      ? selectedPieceIds
+      : [
+          pieceId
+        ];
+
+  if (
+    !selectedPieceIds.includes(
+      pieceId
+    )
+  ) {
+    applyPieceSelection([
+      pieceId
+    ]);
+  }
+
+  const initialPositions =
+    new Map(
+      pieces
+        .filter(
+          (piece) =>
+            movingPieceIds.includes(
+              piece.id
+            )
+        )
+        .map(
+          (piece) => [
+            piece.id,
+            {
+              x:
+                Number(piece.x) ||
+                0,
+              y:
+                Number(piece.y) ||
+                0
+            }
+          ]
+        )
+    );
+
+  const startPalletPosition =
+    threeToPallet(
+      startThreeX,
+      0,
+      startThreeZ
+    );
+
+  groupDragRef.current = {
+    sourcePieceId:
+      pieceId,
+
+    movingPieceIds,
+
+    initialPositions,
+
+    startPalletX:
+      startPalletPosition.x,
+
+    startPalletY:
+      startPalletPosition.y
+  };
+
+  setIsDragging(true);
+}
+
+
+
 
 // Crea una peça nova al centre del palet
 
@@ -986,66 +2001,704 @@ function openNewPieceDialog() {
   );
 }
 
-function openPalletDialog() {
-  setIsPalletDialogOpen(
+
+
+
+
+function applyGripper(
+  gripperDefinition
+) {
+  setActiveGripper({
+    ...gripperDefinition
+  });
+
+  setIsGripperVisible(
     true
   );
+}
+
+function openSeparatorDialog() {
+  setIsSeparatorDialogOpen(true);
 }
 
 function selectConfigurator(
   configuratorName
 ) {
+  cancelPieceReplication();
+
+  selectionRectangleRef.current =
+    null;
+
+  setSelectionRectangle(
+    null
+  );
+
+  setIsRectangleSelectionArmed(
+    false
+  );
+
   setActiveConfigurator(
+    configuratorName
+  );
+
+  if (
+    configuratorName !==
+    "palletizing"
+  ) {
+    setSelectedPalletizingInstanceId(
+      null
+    );
+  }
+}
+
+function handleConfiguratorSelection(
+  configuratorName
+) {
+  if (
+    configuratorName ===
+    "gripper"
+  ) {
+    selectConfigurator(
+      "gripper"
+    );
+
+    return;
+  }
+
+  if (
+    configuratorName ===
+    "pallet"
+  ) {
+    setActiveConfigurator(
+      "pallet"
+    );
+
+    setIsPalletDialogOpen(
+      true
+    );
+
+    return;
+  }
+
+  selectConfigurator(
     configuratorName
   );
 }
 
 
+function applyEmptyLayer() {
+  suppressNextChangeDetection.current =
+    true;
 
+  setPieces([]);
 
-function openConfirmDialog({
-  title,
-  message,
-  confirmLabel,
-  destructive = false,
-  onConfirm
-}) {
-  confirmActionRef.current =
-    onConfirm;
+  clearPieceSelection();
 
-  setConfirmDialog({
-    open: true,
-    title,
-    message,
-    confirmLabel,
-    destructive
-  });
+  setActiveLayerId(null);
+  setLayerName("");
+
+  setPendingLayerId(null);
+
+  setIsPendingNewLayer(
+    false
+  );
+
+  setIsUnsavedLayerDialogOpen(
+    false
+  );
 }
 
-function closeConfirmDialog() {
-  confirmActionRef.current =
-    null;
+function requestNewEmptyLayer() {
+  if (isCurrentLayerDirty) {
+    setPendingLayerId(null);
 
-  setConfirmDialog(
-    (currentDialog) => ({
-      ...currentDialog,
-      open: false
+    setIsPendingNewLayer(
+      true
+    );
+
+    setIsUnsavedLayerDialogOpen(
+      true
+    );
+
+    return;
+  }
+
+  applyEmptyLayer();
+}
+
+function updateReplicationPreview(
+  nextPreview
+) {
+  replicationPreviewRef.current =
+    nextPreview;
+
+  setReplicationPreview(
+    nextPreview
+  );
+}
+
+function updateGenericGripperOffset(
+  offsetType,
+  axis,
+  value
+) {
+  const numericValue = Number(value);
+
+  setCurrentLayerGripperOffsets(
+    (currentOffsets) => ({
+      ...currentOffsets,
+      [offsetType]: {
+        ...currentOffsets[offsetType],
+        [axis]: Number.isFinite(numericValue)
+          ? numericValue
+          : 0
+      }
     })
   );
 }
 
-function confirmDialogAction() {
-  const pendingAction =
-    confirmActionRef.current;
+function updatePieceGripperOffset(
+  pieceId,
+  offsetType,
+  axis,
+  value
+) {
+  const numericValue = Number(value);
 
-  closeConfirmDialog();
+  setPieces((currentPieces) =>
+    currentPieces.map((piece) => {
+      if (piece.id !== pieceId) {
+        return piece;
+      }
 
-  if (
-    typeof pendingAction ===
-    "function"
-  ) {
-    pendingAction();
+      const baseOffsets =
+        piece.gripperOffsets ??
+        currentLayerGripperOffsets;
+
+      return {
+        ...piece,
+        gripperOffsets: {
+          approach: {
+            ...baseOffsets.approach
+          },
+          retreat: {
+            ...baseOffsets.retreat
+          },
+          [offsetType]: {
+            ...baseOffsets[offsetType],
+            [axis]: Number.isFinite(numericValue)
+              ? numericValue
+              : 0
+          }
+        }
+      };
+    })
+  );
+}
+
+function clearPieceGripperOffsets(
+  pieceId
+) {
+  setPieces((currentPieces) =>
+    currentPieces.map((piece) =>
+      piece.id === pieceId
+        ? {
+            ...piece,
+            gripperOffsets: null
+          }
+        : piece
+    )
+  );
+}
+
+function changeGripperOffsetPreviewMode(
+  nextMode
+) {
+  setGripperOffsetPreviewMode(
+    nextMode
+  );
+
+  if (nextMode) {
+    setIsGripperVisible(true);
   }
+}
+
+function updatePieceOrderId(
+  pieceId,
+  value
+) {
+  setPieces(
+    (currentPieces) =>
+      currentPieces.map(
+        (piece) =>
+          piece.id === pieceId
+            ? {
+                ...piece,
+                orderId:
+                  value
+              }
+            : piece
+      )
+  );
+}
+
+function applySavedLayer(
+  layerId
+) {
+  const layerToApply =
+    layers.find(
+      (layer) =>
+        layer.id === layerId
+    );
+
+  if (!layerToApply) {
+    return;
+  }
+
+  suppressNextChangeDetection.current =
+    true;
+
+  setPieces(
+  ensureOrderIds(
+    layerToApply.pieces
+  )
+);
+
+  clearPieceSelection();
+
+  setActiveLayerId(
+    layerToApply.id
+  );
+
+  setLayerName(
+    layerToApply.name
+  );
+
+  setCurrentLayerGripperOffsets(
+    layerToApply.gripperOffsets
+      ? {
+          approach: {
+            ...layerToApply.gripperOffsets.approach
+          },
+          retreat: {
+            ...layerToApply.gripperOffsets.retreat
+          }
+        }
+      : {
+          approach: { x: 0, y: 0, z: 0 },
+          retreat: { x: 0, y: 0, z: 0 }
+        }
+  );
+
+  setGripperOffsetPreviewMode(null);
+
+setShowOrderIds(
+  false
+);
+}
+
+
+
+
+
+
+
+
+
+
+function saveCurrentLayer(
+  forcedName = null
+) {
+
+const validation =
+  getOrderIdValidation(
+    pieces
+  );
+
+if (!validation.isValid) {
+  setOrderIdErrorDialog({
+    open: true,
+
+    message:
+      createOrderIdErrorMessage(
+        validation
+      )
+  });
+
+  setShowOrderIds(
+    true
+  );
+
+  return null;
+}
+
+
+  const nameToUse =
+    typeof forcedName === "string"
+      ? forcedName
+      : layerName;
+
+  const cleanName =
+    nameToUse.trim();
+
+  const finalName =
+    cleanName ||
+    activeLayer?.name ||
+    t.layer.defaultName(layers.length + 1);
+
+  const normalizedFinalName =
+    finalName.toLowerCase();
+
+  const currentDate =
+    new Date().toISOString();
+
+  /*
+    Comprovem si el nom escrit és exactament
+    el mateix que el de la capa activa.
+  */
+  const isUpdatingActiveLayer =
+    Boolean(
+      activeLayer &&
+      activeLayer.name
+        .toLowerCase() ===
+        normalizedFinalName
+    );
+
+  /*
+    També comprovem si existeix una altra
+    capa guardada amb aquest mateix nom.
+  */
+  const existingLayerByName =
+    layers.find(
+      (layer) =>
+        layer.name
+          .toLowerCase() ===
+        normalizedFinalName
+    );
+
+  /*
+    Decidim quin ID s'ha d'utilitzar:
+
+    1. Mateix nom que la capa activa:
+       actualitzem la capa activa.
+
+    2. Nom d'una altra capa existent:
+       actualitzem aquella capa.
+
+    3. Nom completament nou:
+       creem un ID nou.
+  */
+  const layerIdToUse =
+    isUpdatingActiveLayer
+      ? activeLayer.id
+      : existingLayerByName?.id ??
+        createLayerId();
+
+  const existingLayer =
+    layers.find(
+      (layer) =>
+        layer.id ===
+        layerIdToUse
+    );
+
+const normalizedPieces =
+  pieces.map(
+    (piece) => ({
+      ...piece,
+
+      orderId:
+        Number(
+          piece.orderId
+        )
+    })
+  );
+
+
+
+  const layerToSave = {
+    id: layerIdToUse,
+    name: finalName,
+
+    createdAt:
+      existingLayer?.createdAt ??
+      currentDate,
+
+    updatedAt:
+      currentDate,
+
+    pieces:
+  cloneLayerPieces(
+    normalizedPieces
+  )
+  };
+
+  setLayers(
+    (currentLayers) => {
+      const layerExists =
+        currentLayers.some(
+          (layer) =>
+            layer.id ===
+            layerToSave.id
+        );
+
+      if (layerExists) {
+        return currentLayers.map(
+          (layer) =>
+            layer.id ===
+            layerToSave.id
+              ? layerToSave
+              : layer
+        );
+      }
+
+      return [
+        ...currentLayers,
+        layerToSave
+      ];
+    }
+  );
+
+  setActiveLayerId(
+    layerToSave.id
+  );
+
+  setLayerName(
+    layerToSave.name
+  );
+
+  setHasUnsavedChanges(true);
+
+  return layerToSave;
+}
+
+function requestLayerSelection(
+  layerId
+) {
+  if (
+    layerId === activeLayerId
+  ) {
+    return;
+  }
+
+  if (isCurrentLayerDirty) {
+    setPendingLayerId(
+      layerId
+    );
+
+    setIsPendingNewLayer(
+      false
+    );
+
+    setIsUnsavedLayerDialogOpen(
+      true
+    );
+
+    return;
+  }
+
+  applySavedLayer(
+    layerId
+  );
+}
+
+function savePendingLayerChanges() {
+  const savedLayer =
+    saveCurrentLayer();
+
+  if (!savedLayer) {
+    return;
+  }
+
+  const nextLayerId =
+    pendingLayerId;
+
+  const shouldCreateEmptyLayer =
+    isPendingNewLayer;
+
+  setPendingLayerId(null);
+
+  setIsPendingNewLayer(
+    false
+  );
+
+  setIsUnsavedLayerDialogOpen(
+    false
+  );
+
+  if (shouldCreateEmptyLayer) {
+    applyEmptyLayer();
+    return;
+  }
+
+  if (nextLayerId) {
+    applySavedLayer(
+      nextLayerId
+    );
+  }
+}
+
+function discardPendingLayerChanges() {
+  const nextLayerId =
+    pendingLayerId;
+
+  const shouldCreateEmptyLayer =
+    isPendingNewLayer;
+
+  setPendingLayerId(null);
+
+  setIsPendingNewLayer(
+    false
+  );
+
+  setIsUnsavedLayerDialogOpen(
+    false
+  );
+
+  if (shouldCreateEmptyLayer) {
+    applyEmptyLayer();
+    return;
+  }
+
+  if (nextLayerId) {
+    applySavedLayer(
+      nextLayerId
+    );
+  }
+}
+
+function requestDeleteSavedLayer(
+  layerId
+) {
+  const layerToDelete =
+    layers.find(
+      (layer) =>
+        layer.id === layerId
+    );
+
+  if (!layerToDelete) {
+    return;
+  }
+
+  openConfirmDialog({
+    title: t.layer.deleteTitle,
+
+    message:
+      t.layer.deleteQuestion(layerToDelete.name),
+
+    confirmLabel: t.common.yes,
+    cancelLabel: t.common.no,
+    destructive: true,
+
+    onConfirm: () => {
+      deleteSavedLayer(
+        layerId
+      );
+    }
+  });
+}
+
+function deleteSavedLayer(
+  layerId
+) {
+  const deletingActiveLayer =
+    activeLayerId === layerId;
+
+  setLayers(
+    (currentLayers) =>
+      currentLayers.filter(
+        (layer) =>
+          layer.id !== layerId
+      )
+  );
+
+  setPalletizingSequence(
+  (currentSequence) =>
+    currentSequence.filter(
+      (item) =>
+        item.sourceLayerId !==
+        layerId
+    )
+);
+
+  if (deletingActiveLayer) {
+    setActiveLayerId(null);
+    setLayerName("");
+  }
+
+  setHasUnsavedChanges(true);
+}
+
+
+
+function cancelPendingLayerSelection() {
+  setPendingLayerId(null);
+
+  setIsPendingNewLayer(
+    false
+  );
+
+  setIsUnsavedLayerDialogOpen(
+    false
+  );
+}
+
+
+function addLayerToPalletizing(
+  sourceLayerId
+) {
+  const sourceLayerExists =
+    layers.some(
+      (layer) =>
+        layer.id ===
+        sourceLayerId
+    );
+
+  if (!sourceLayerExists) {
+    return;
+  }
+
+  const newInstance = {
+    instanceId:
+      createPalletizingInstanceId(),
+
+    sourceLayerId
+  };
+
+  setPalletizingSequence(
+    (currentSequence) => [
+      ...currentSequence,
+      newInstance
+    ]
+  );
+
+  setSelectedPalletizingInstanceId(
+    newInstance.instanceId
+  );
+
+  setHasUnsavedChanges(true);
+}
+
+function deletePalletizingLayer(
+  instanceId
+) {
+  setPalletizingSequence(
+    (currentSequence) =>
+      currentSequence.filter(
+        (item) =>
+          item.instanceId !==
+          instanceId
+      )
+  );
+
+  setSelectedPalletizingInstanceId(
+    (currentSelectedId) =>
+      currentSelectedId ===
+      instanceId
+        ? null
+        : currentSelectedId
+  );
+
+  setHasUnsavedChanges(true);
 }
 
 
@@ -1073,6 +2726,13 @@ function buildCurrentProject({
       ...activePallet
     },
 
+    activeGripper:
+      activeGripper
+        ? {
+      ...activeGripper
+    }
+: null,
+
     pieces:
       pieces.map(
         (piece) => ({
@@ -1080,116 +2740,243 @@ function buildCurrentProject({
         })
       ),
 
+      layers:
+  layers.map(
+    (layer) => ({
+      ...layer,
+
+      pieces:
+        cloneLayerPieces(
+          layer.pieces
+        )
+    })
+  ),
+
+activeLayerId,
+
+palletizingSequence:
+palletizingSequence.map(
+(item) => ({
+...item
+})
+),
     selectedPieceId
   };
 }
 
+
 function saveCurrentProjectAs() {
-  const suggestedName =
-    activeProject.id
-      ? `${activeProject.name} còpia`
-      : "";
-
-  setSaveProjectSuggestedName(
-    suggestedName
-  );
-
-  setIsSaveProjectDialogOpen(
-    true
-  );
+if (isSavingProjectRef.current) {
+return;
 }
-
+ 
+const suggestedName =
+activeProject.id
+? `${activeProject.name} ${t.project.copySuffix}`
+: activeProject.name ===
+t.project.unnamed
+? ""
+: activeProject.name;
+ 
+setSaveProjectSuggestedName(
+suggestedName
+);
+ 
+setIsSaveProjectDialogOpen(
+true
+);
+}
 
 function confirmSaveCurrentProjectAs(
-  projectName
+projectName
 ) {
-  const newProjectId =
-    createProjectId();
-
-  const projectToSave =
-    buildCurrentProject({
-      id: newProjectId,
-      name: projectName,
-      createdAt: null
-    });
-
-  const savedProject =
-    saveProject(
-      projectToSave
-    );
-
-  if (!savedProject) {
-    window.alert(
-      "No s'ha pogut guardar el projecte."
-    );
-
-    return;
-  }
-
-  setActiveProject({
-    id: savedProject.id,
-    name: savedProject.name,
-    createdAt:
-      savedProject.createdAt
-  });
-
-  setHasUnsavedChanges(false);
-
-  window.localStorage.removeItem(
-    AUTOSAVE_STORAGE_KEY
-  );
-
-  setIsSaveProjectDialogOpen(
-    false
-  );
+if (isSavingProjectRef.current) {
+return;
 }
 
+const cleanProjectName =
+String(
+projectName ?? ""
+).trim();
+
+if (!cleanProjectName) {
+window.alert(
+t.project.saveNameRequired
+);
+
+return;
+}
+
+isSavingProjectRef.current =
+true;
+
+/*
+Tanquem el popup immediatament.
+ 
+Això evita que l'usuari pugui prémer
+diverses vegades el botó de guardat.
+*/
+setIsSaveProjectDialogOpen(
+false
+);
+
+try {
+const newProjectId =
+createProjectId();
+
+const projectToSave =
+buildCurrentProject({
+id:
+newProjectId,
+
+name:
+cleanProjectName,
+
+createdAt:
+null
+});
+
+const savedProject =
+saveProject(
+projectToSave
+);
+
+if (!savedProject) {
+window.alert(
+t.project.saveError
+);
+
+setIsSaveProjectDialogOpen(
+true
+);
+
+return;
+}
+
+suppressNextChangeDetection.current =
+true;
+
+setActiveProject({
+id:
+savedProject.id,
+
+name:
+savedProject.name,
+
+createdAt:
+savedProject.createdAt
+});
+
+setHasUnsavedChanges(
+false
+);
+
+clearAutosave();
+
+} catch (error) {
+console.error(
+"Error guardant el projecte:",
+error
+);
+
+window.alert(
+t.project.saveError
+);
+
+setIsSaveProjectDialogOpen(
+true
+);
+} finally {
+isSavingProjectRef.current =
+false;
+}
+}
 
 
 
 
 function saveCurrentProject() {
-  if (!activeProject.id) {
-    saveCurrentProjectAs();
-    return;
-  }
-
-  const projectToSave =
-    buildCurrentProject({
-      id: activeProject.id,
-      name: activeProject.name,
-      createdAt:
-        activeProject.createdAt
-    });
-
-  const savedProject =
-    saveProject(
-      projectToSave
-    );
-
-  if (!savedProject) {
-    window.alert(
-      "No s'ha pogut guardar el projecte."
-    );
-
-    return;
-  }
-
-  setActiveProject({
-    id: savedProject.id,
-    name: savedProject.name,
-    createdAt:
-      savedProject.createdAt
-  });
-
-  setHasUnsavedChanges(false);
-
-
-  window.localStorage.removeItem(
-  AUTOSAVE_STORAGE_KEY
-);
+if (isSavingProjectRef.current) {
+return;
 }
 
+/*
+Només obrim Guardar com a si el projecte
+encara no ha estat guardat mai.
+*/
+if (
+activeProject.id === null ||
+activeProject.id === undefined ||
+activeProject.id === ""
+) {
+saveCurrentProjectAs();
+
+return;
+}
+
+isSavingProjectRef.current =
+true;
+
+try {
+const projectToSave =
+buildCurrentProject({
+id:
+activeProject.id,
+
+name:
+activeProject.name,
+
+createdAt:
+activeProject.createdAt
+});
+
+const savedProject =
+saveProject(
+projectToSave
+);
+
+if (!savedProject) {
+window.alert(
+t.project.saveError
+);
+
+return;
+}
+
+suppressNextChangeDetection.current =
+true;
+
+setActiveProject({
+id:
+savedProject.id,
+
+name:
+savedProject.name,
+
+createdAt:
+savedProject.createdAt
+});
+
+setHasUnsavedChanges(
+false
+);
+
+clearAutosave();
+
+} catch (error) {
+console.error(
+"Error actualitzant el projecte:",
+error
+);
+
+window.alert(
+t.project.saveError
+);
+} finally {
+isSavingProjectRef.current =
+false;
+}
+}
 
 
 function createNewProject() {
@@ -1199,11 +2986,12 @@ function createNewProject() {
   }
 
   openConfirmDialog({
-    title: "Crear un projecte nou",
+    title:
+  t.project.newTitle,
     message:
-      "Hi ha canvis sense guardar. Si continues, la composició actual es descartarà.",
+      t.project.newDiscardMessage,
     confirmLabel:
-      "Descartar i continuar",
+      t.project.discardAndContinue,
     destructive: true,
     onConfirm:
       resetToNewProject
@@ -1219,12 +3007,32 @@ function resetToNewProject() {
   suppressNextChangeDetection.current =
   true;
 
-  setPieces([]);
+  cancelPieceReplication();
+
+  resetPiecesHistory([]);
+
+  setLayers([]);
+  setActiveLayerId(null);
+
+  setPalletizingSequence([]);
+
+  setSelectedPalletizingInstanceId(
+    null
+  );
+  setLayerName("");
+  setPendingLayerId(null);
+  setIsPendingNewLayer(
+    false
+  );
+
+  setIsUnsavedLayerDialogOpen(
+    false
+  );
 
   setActivePallet({
     ...PALLET_CONFIG
   });
-
+  setActiveGripper(null);
   setSelectedPieceId(null);
 
   setInputX("");
@@ -1236,18 +3044,16 @@ function resetToNewProject() {
 
   setActiveProject({
     id: null,
-    name: "Projecte sense nom",
+    name: t.project.unnamed,
     createdAt: null
   });
 
   setHasUnsavedChanges(false);
 
-window.localStorage.removeItem(
-  AUTOSAVE_STORAGE_KEY
-);
+clearAutosave();
+
 
 }
-
 
 
 
@@ -1270,19 +3076,15 @@ function openProjectDialog() {
   }
 
   openConfirmDialog({
-    title: "Obrir un altre projecte",
-    message:
-      "Hi ha canvis sense guardar. Si continues, la composició actual es descartarà.",
+    title: t.project.openTitle,
+    message: t.project.openDiscardMessage,
     confirmLabel:
-      "Descartar i obrir",
+      t.project.discardAndOpen,
     destructive: true,
     onConfirm:
       showOpenProjectDialog
   });
 }
-
-
-
 
 
 
@@ -1293,16 +3095,49 @@ function applyOpenedProject(
   suppressNextChangeDetection.current =
   true;
 
+  cancelPieceReplication();
+
   const projectPieces =
-    Array.isArray(
-      project.pieces
-    )
-      ? project.pieces.map(
-          (piece) => ({
-            ...piece
+  ensureOrderIds(
+    project.pieces
+  );
+
+
+  const projectLayers =
+  Array.isArray(
+    project.layers
+  )
+    ? project.layers.map(
+        (layer) => ({
+          ...layer,
+
+          pieces:
+  ensureOrderIds(
+    layer.pieces
+  )
+        })
+      )
+    : [];
+
+    const restoredPalletizingSequence =
+  Array.isArray(
+    project.palletizingSequence
+  )
+    ? project.palletizingSequence
+        .filter(
+          (item) =>
+            projectLayers.some(
+              (layer) =>
+                layer.id ===
+                item.sourceLayerId
+            )
+        )
+        .map(
+          (item) => ({
+            ...item
           })
         )
-      : [];
+    : [];
 
   const nextSelectedPieceId =
     projectPieces.some(
@@ -1313,9 +3148,39 @@ function applyOpenedProject(
       ? project.selectedPieceId
       : null;
 
-  setPieces(
-    projectPieces
-  );
+  resetPiecesHistory(
+  projectPieces
+);
+
+
+  setLayers(
+  projectLayers
+);
+
+setPalletizingSequence(
+  restoredPalletizingSequence
+);
+
+setSelectedPalletizingInstanceId(
+  null
+);
+
+const restoredActiveLayer =
+  projectLayers.find(
+    (layer) =>
+      layer.id ===
+      project.activeLayerId
+  ) ?? null;
+
+setActiveLayerId(
+  restoredActiveLayer?.id ??
+  null
+);
+
+setLayerName(
+  restoredActiveLayer?.name ??
+  ""
+);
 
   setActivePallet(
     project.activePallet
@@ -1327,9 +3192,25 @@ function applyOpenedProject(
         }
   );
 
-  setSelectedPieceId(
+setActiveGripper(
+  project.activeGripper
+    ? {
+        ...project.activeGripper
+      }
+    : null
+);
+
+  if (
+  nextSelectedPieceId !==
+  null
+) {
+  applyPieceSelection([
     nextSelectedPieceId
-  );
+  ]);
+} else {
+  clearPieceSelection();
+}
+
 
   setActiveProject({
     id: project.id,
@@ -1341,13 +3222,13 @@ function applyOpenedProject(
 
   setHasUnsavedChanges(false);
 
-  window.localStorage.removeItem(
-  AUTOSAVE_STORAGE_KEY
-);
+ clearAutosave();
+
   setIsOpenProjectDialogOpen(
     false
   );
 }
+
 
 
 function applyPallet(
@@ -1371,9 +3252,133 @@ function createPieceFromDialog(
           )
         ) + 1;
 
+const newOrderId =
+  getNextOrderId(
+    pieces
+  );
+
+console.log(
+  "GEOMETRIA IMPORTADA:",
+  {
+    name:
+      pieceDefinition.name,
+
+    bottomFace:
+      pieceDefinition.modelBottomFace,
+
+    hasCollisionGeometry:
+      Boolean(
+        pieceDefinition
+          .collisionGeometry
+      ),
+
+    vertices:
+      pieceDefinition
+        .collisionGeometry
+        ?.vertices
+        ?.length ??
+      0,
+
+    triangles:
+      pieceDefinition
+        .collisionGeometry
+        ?.triangles
+        ?.length ??
+      0,
+
+    edges:
+      pieceDefinition
+        .collisionGeometry
+        ?.edges
+        ?.length ??
+      0,
+
+    faces:
+      pieceDefinition
+        .collisionGeometry
+        ?.faces
+        ?.length ??
+      0
+  }
+);
+
+const importedVertices =
+  pieceDefinition
+    .collisionGeometry
+    ?.vertices ??
+  [];
+
+console.table(
+  importedVertices.map(
+    (vertex, index) => ({
+      index,
+
+      x:
+        Number(
+          vertex.x
+        ).toFixed(3),
+
+      y:
+        Number(
+          vertex.y
+        ).toFixed(3),
+
+      z:
+        Number(
+          vertex.z
+        ).toFixed(3)
+    })
+  )
+);
+
+if (
+  importedVertices.length > 0
+) {
+  const xValues =
+    importedVertices.map(
+      (vertex) =>
+        Number(vertex.x)
+    );
+
+  const yValues =
+    importedVertices.map(
+      (vertex) =>
+        Number(vertex.y)
+    );
+
+  const zValues =
+    importedVertices.map(
+      (vertex) =>
+        Number(vertex.z)
+    );
+
+  console.log(
+    "LÍMITS DEL HULL:",
+    {
+      minX:
+        Math.min(...xValues),
+
+      maxX:
+        Math.max(...xValues),
+
+      minY:
+        Math.min(...yValues),
+
+      maxY:
+        Math.max(...yValues),
+
+      minZ:
+        Math.min(...zValues),
+
+      maxZ:
+        Math.max(...zValues)
+    }
+  );
+}
+
   const newPiece = {
     id: newId,
-
+    orderId: newOrderId,
     /*
       Guardem el nom també dins de la
       peça creada.
@@ -1387,6 +3392,38 @@ function createPieceFromDialog(
 
     pieceType:
       pieceDefinition.pieceType,
+
+      modelId:
+  pieceDefinition.modelId ??
+  null,
+
+modelName:
+  pieceDefinition.modelName ??
+  null,
+
+modelFormat:
+  pieceDefinition.modelFormat ??
+  null,
+
+modelUnit:
+  pieceDefinition.modelUnit ??
+  null,
+
+  modelUnit:
+  pieceDefinition.modelUnit ??
+  null,
+
+modelBottomFace:
+  pieceDefinition.modelBottomFace ??
+  "NEGATIVE_Y",
+
+collisionGeometry:
+  pieceDefinition.collisionGeometry ??
+  null,
+
+
+
+
 
     width:
       pieceDefinition.width,
@@ -1417,7 +3454,11 @@ function createPieceFromDialog(
       que utilitzava addPiece().
     */
     z:
-      pieceDefinition.height / 2,
+      roundToThreeDecimals(
+        Number(
+          pieceDefinition.height
+        ) / 2
+      ),
 
     rxDeg: 0,
     ryDeg: 0,
@@ -1431,51 +3472,268 @@ function createPieceFromDialog(
     ]
   );
 
-  setSelectedPieceId(newId);
+  applyPieceSelection([
+  newId
+]);
 
   setIsNewPieceDialogOpen(
     false
   );
 }
 
+function createSeparatorFromDialog(
+  separatorDefinition
+) {
+  const newId =
+    pieces.length === 0
+      ? 1
+      : Math.max(
+          ...pieces.map(
+            (piece) => piece.id
+          )
+        ) + 1;
+
+const newOrderId =
+  getNextOrderId(
+    pieces
+  );
 
 
+  const newSeparator = {
+    id: newId,
+    orderId: newOrderId,
+    name:
+      separatorDefinition.name ||
+      `Separador ${newId}`,
+
+    pieceCategory: "SEPARATOR",
+    pieceType: "RECTANGULAR",
+
+    width:
+      separatorDefinition.width,
+
+    height:
+      separatorDefinition.height,
+
+    depth:
+      separatorDefinition.depth,
+
+    topWidth:
+      separatorDefinition.width,
+
+    topDepth:
+      separatorDefinition.depth,
+
+    color:
+      separatorDefinition.color ||
+      "#d4b483",
+
+    modelType:
+      separatorDefinition.modelType ||
+      "BOX",
+
+    modelData:
+      separatorDefinition.modelData ||
+      null,
+
+    referencePoint: "TOP_CENTER",
+
+    faceOffsetX: 0,
+    faceOffsetY: 0,
+    faceRotationDeg: 0,
+
+    x: 0,
+    y: 0,
+
+    z:
+      roundToThreeDecimals(
+        Number(
+          separatorDefinition.height
+        ) / 2
+      ),
+
+    rxDeg: 0,
+    ryDeg: 0,
+    rzDeg: 0
+  };
+
+  setPieces(
+    (currentPieces) => [
+      ...currentPieces,
+      newSeparator
+    ]
+  );
+
+  applyPieceSelection([
+  newId
+]);
+
+  setActiveConfigurator(
+    "separators"
+  );
+
+  setIsSeparatorDialogOpen(
+    false
+  );
+}
 
 
 // Duplica la peça seleccionada
 function duplicatePiece() {
-if (!selectedData) return;
-const newId =
-pieces.length === 0
-? 1
-: Math.max(...pieces.map((piece) => piece.id)) + 1;
-const duplicatedPiece = {
-...selectedData,
-id: newId,
-x: selectedData.x + 100
+  if (!selectedData) {
+    return;
+  }
 
-};
-setPieces([...pieces, duplicatedPiece]);
-setSelectedPieceId(newId);
+  const newId =
+    pieces.length === 0
+      ? 1
+      : Math.max(
+          ...pieces.map(
+            (piece) =>
+              Number(piece.id)
+          )
+        ) + 1;
+
+  const newOrderId =
+    getNextOrderId(
+      pieces
+    );
+
+  const duplicatedPiece = {
+    ...selectedData,
+
+    id:
+      newId,
+
+    orderId:
+      newOrderId,
+
+    x:
+      roundToThreeDecimals(
+        Number(selectedData.x) +
+        100
+      ),
+
+    y:
+      roundToThreeDecimals(
+        Number(selectedData.y)
+      ),
+
+    z:
+      roundToThreeDecimals(
+        Number(selectedData.z)
+      )
+  };
+
+  setPieces(
+    (currentPieces) => [
+      ...currentPieces,
+      duplicatedPiece
+    ]
+  );
+
+  applyPieceSelection([
+    newId
+  ]);
 }
 
 // Elimina la peça seleccionada
-function deletePiece() {
-if (!selectedData) return;
-setPieces(
-pieces.filter((piece) => piece.id !== selectedPieceId)
+function deleteSelectedPieces() {
+  if (
+    selectedPieceIds.length ===
+      0
+  ) {
+    return;
+  }
+
+  const selectedIdSet =
+    new Set(
+      selectedPieceIds
+    );
+
+  setPieces(
+    (currentPieces) => {
+      
+
+      const remainingPieces =
+        currentPieces.filter(
+          (piece) =>
+            !selectedIdSet.has(
+              piece.id
+            )
+        );
+
+      return normalizeOrderIdsAfterDeletion(
+  remainingPieces
 );
-setSelectedPieceId(null);
-setInputX("");
-setInputY("");
-setInputZ("");
-setInputRX("");
-setInputRY("");
-setInputRZ("");
+    }
+  );
+
+  clearPieceSelection();
+}
+
+
+function moveSelectedPieces(
+  deltaX,
+  deltaY
+) {
+  const moveX =
+    Number(deltaX);
+
+  const moveY =
+    Number(deltaY);
+
+  if (
+    !Number.isFinite(moveX)
+  ) {
+    return;
+  }
+
+  if (
+    !Number.isFinite(moveY)
+  ) {
+    return;
+  }
+
+  const selectedIdSet =
+    new Set(
+      selectedPieceIds
+    );
+
+  setPieces(
+    currentPieces =>
+      currentPieces.map(
+        piece => {
+          if (
+            !selectedIdSet.has(
+              piece.id
+            )
+          ) {
+            return piece;
+          }
+
+          return {
+            ...piece,
+
+            x:
+              roundToThreeDecimals(
+                piece.x +
+                moveX
+              ),
+
+            y:
+              roundToThreeDecimals(
+                piece.y +
+                moveY
+              )
+          };
+        }
+      )
+  );
 }
 
 function isPieceCollidingWithOtherPieces(piece) {
-  console.log("COLLISION TEST", piece.id);
+  
 
   return pieces.some(
     (otherPiece) =>
@@ -1487,15 +3745,43 @@ function isPieceCollidingWithOtherPieces(piece) {
   );
 }
 
-console.log(pieces);
-
-
 //escena 3D
  return (
   <>
-  <Canvas 
-    shadows
-    style={{ width: "100vw", height: "100vh" }} camera={{ position: [2000, 1500, 2000], near: 1, far: 20000 }} >
+  <Canvas
+  shadows
+  style={{
+    width: "100vw",
+    height: "100vh"
+  }}
+  camera={{
+  position: [
+    2800,
+    2100,
+    2800
+  ],
+  fov: 35,
+  near: 1,
+  far: 20000
+}}
+
+  onCreated={({
+    camera,
+    gl
+  }) => {
+    sceneCameraRef.current =
+      camera;
+
+    canvasElementRef.current =
+      gl.domElement;
+  }}
+  onPointerDown={
+    handleCanvasPointerDown
+  }
+  onDoubleClick={
+    handleCanvasDoubleClick
+  }
+>
     {/* Color de fons */}
     <color attach="background" args={["white"]} />
     <ambientLight intensity={0.8} />
@@ -1529,25 +3815,155 @@ console.log(pieces);
  
 {/* Genera una peça 3D per cada registre de l'array */}
 
+{activeConfigurator !==
+  "palletizing" &&
+  pieces.map((piece) => (
+    <DraggablePiece
+      key={piece.id}
 
-{pieces.map((piece) => (
-  <DraggablePiece
-    key={piece.id}
-    piece={piece}
-    selected={piece.id === selectedPieceId}
-    colliding={isPieceCollidingWithPallet(piece, activePallet) || isPieceCollidingWithOtherPieces(piece)
-}
-    outside={isPieceOutsidePallet(piece, activePallet)}
-    onSelect={setSelectedPieceId}
-    onMove={movePiece}
-    onDragStart={() => setIsDragging(true)}
-    onDragEnd={() => setIsDragging(false)}
-    
-  />
-))}
+      piece={
+        piece
+      }
 
-{/* Graella al terra */}
+      selected={
+        selectedPieceIds.includes(
+          piece.id
+        )
+      }
+
+      colliding={
+        isPieceCollidingWithPallet(
+          piece,
+          activePallet
+        ) ||
+        isPieceCollidingWithOtherPieces(
+          piece
+        )
+      }
+
+      outside={
+        isPieceOutsidePallet(
+          piece,
+          activePallet
+        )
+      }
+
+      dimmed={
+        shouldShowAppliedGripper &&
+        Boolean(activeGripper) &&
+        Boolean(selectedData) &&
+        piece.id !== selectedData.id
+      }
+
+      onSelect={
+        selectPiece
+      }
+
+      onMove={
+        movePiece
+      }
+
+      onDragStart={
+        startPieceDrag
+      }
+
+      onDragEnd={
+        finishPieceDrag
+      }
+
+      onReplicationStart={
+        startPieceReplication
+      }
+
+      onReplicationMove={
+        movePieceReplication
+      }
+
+      onReplicationEnd={
+        finishPieceReplication
+      }
+
+      onReplicationCancel={
+        cancelPieceReplication
+      }
+    />
+  ))}
+
+  {activeConfigurator !==
+  "palletizing" &&
+  replicationPreview && (
+    <ReplicationPreview
+      candidates={
+        replicationPreview.candidates
+      }
+    />
+  )}
+
+{activeConfigurator ===
+  "layers" &&
+  showOrderIds && (
+    <PieceOrderIdLabels
+      pieces={
+        pieces
+      }
+      validation={
+        orderIdValidation
+      }
+      onChangeOrderId={
+        updatePieceOrderId
+      }
+      t={
+    t
+  }
+/>
+  )}
+
+
+
+
+
+{activeConfigurator ===
+  "palletizing" &&
+  palletizedLayerInstances.map(
+    (layerInstance) => (
+      <PalletizedLayer
+        key={
+          layerInstance.instanceId
+        }
+        layerInstance={
+          layerInstance
+        }
+        selected={
+          layerInstance.instanceId ===
+          selectedPalletizingInstanceId
+        }
+        onSelect={
+          setSelectedPalletizingInstanceId
+        }
+      />
+    )
+  )}
+
+{!replicationPreview &&
+  activeConfigurator !==
+    "palletizing" &&
+  activeGripper &&
+  selectedData &&
+  shouldShowAppliedGripper && (
+    <AppliedGripper
+      gripper={
+        activeGripper
+      }
+      piece={
+        selectedData
+      }
     
+  offsetPreview={
+    activeGripperOffsetPreview
+  }
+/>
+)}
+
 <FloorGrid
   palletHeight={
     activePallet.sizeZ
@@ -1556,8 +3972,31 @@ console.log(pieces);
 
 
 
-    <OrbitControls enabled={!isDragging} />
+    <OrbitControls
+    makeDefault
+ref={orbitControlsRef}
+  enabled={!isDragging}
+  target={orbitTarget}
+/>
   </Canvas>
+
+  <ViewCube
+  cameraRef={
+    sceneCameraRef
+  }
+  controlsRef={
+    orbitControlsRef
+  }
+  fallbackTarget={
+    orbitTarget
+  }
+/>
+
+  <SelectionRectangle
+  rectangle={
+    selectionRectangle
+  }
+/>
 
   <div
   style={{
@@ -1582,7 +4021,9 @@ console.log(pieces);
 
 <ProjectMenu
   projectName={
-    activeProject.name
+    activeProject.id
+      ? activeProject.name
+      : t.project.unnamed
   }
   hasUnsavedChanges={
     hasUnsavedChanges
@@ -1599,178 +4040,30 @@ console.log(pieces);
   onSaveProjectAs={
     saveCurrentProjectAs
   }
+  t={
+    t
+  }
 />
 
-<section
-  style={{
-    ...panelSectionStyle,
-    marginBottom: "12px"
-  }}
->
-
-
-  <div
-    style={{
-      display: "flex",
-      flexDirection: "column",
-      gap: "7px"
-    }}
-  >
-    <button
-      type="button"
-      onClick={() => {
-        selectConfigurator(
-          "gripper"
-        );
-      }}
-      style={{
-        ...configuratorButtonStyle,
-        borderColor:
-          activeConfigurator ===
-          "gripper"
-            ? "#2767c5"
-            : "#aeb6bf",
-        background:
-          activeConfigurator ===
-          "gripper"
-            ? "#eef4fb"
-            : "#ffffff",
-        color:
-          activeConfigurator ===
-          "gripper"
-            ? "#2767c5"
-            : "#303840"
-      }}
-    >
-      Configurador gripper
-    </button>
-
-    <button
-      type="button"
-      onClick={() => {
-        selectConfigurator(
-          "separators"
-        );
-      }}
-      style={{
-        ...configuratorButtonStyle,
-        borderColor:
-          activeConfigurator ===
-          "separators"
-            ? "#2767c5"
-            : "#aeb6bf",
-        background:
-          activeConfigurator ===
-          "separators"
-            ? "#eef4fb"
-            : "#ffffff",
-        color:
-          activeConfigurator ===
-          "separators"
-            ? "#2767c5"
-            : "#303840"
-      }}
-    >
-      Configurador separadors
-    </button>
-
-    <button
-      type="button"
-      onClick={() => {
-        setActiveConfigurator(
-          "pallet"
-        );
-
-        openPalletDialog();
-      }}
-      style={{
-        ...configuratorButtonStyle,
-        borderColor:
-          activeConfigurator ===
-          "pallet"
-            ? "#2767c5"
-            : "#aeb6bf",
-        background:
-          activeConfigurator ===
-          "pallet"
-            ? "#eef4fb"
-            : "#ffffff",
-        color:
-          activeConfigurator ===
-          "pallet"
-            ? "#2767c5"
-            : "#303840"
-      }}
-    >
-      Configurador palet
-    </button>
-
-    <button
-      type="button"
-      onClick={() => {
-        selectConfigurator(
-          "layers"
-        );
-      }}
-      style={{
-        ...configuratorButtonStyle,
-        borderColor:
-          activeConfigurator ===
-          "layers"
-            ? "#2767c5"
-            : "#aeb6bf",
-        background:
-          activeConfigurator ===
-          "layers"
-            ? "#eef4fb"
-            : "#ffffff",
-        color:
-          activeConfigurator ===
-          "layers"
-            ? "#2767c5"
-            : "#303840"
-      }}
-    >
-      Configurador capes
-    </button>
-
-    <button
-      type="button"
-      onClick={() => {
-        selectConfigurator(
-          "palletizing"
-        );
-      }}
-      style={{
-        ...configuratorButtonStyle,
-        borderColor:
-          activeConfigurator ===
-          "palletizing"
-            ? "#2767c5"
-            : "#aeb6bf",
-        background:
-          activeConfigurator ===
-          "palletizing"
-            ? "#eef4fb"
-            : "#ffffff",
-        color:
-          activeConfigurator ===
-          "palletizing"
-            ? "#2767c5"
-            : "#303840"
-      }}
-    >
-      Configurador paletitzat
-    </button>
-  </div>
-</section>
+<ConfiguratorMenu
+  activeConfigurator={
+    activeConfigurator
+  }
+  onSelectConfigurator={
+    handleConfiguratorSelection
+  }
+  t={
+    t
+  }
+/>
 
 {activeConfigurator ===
-  "layers" && (
+  "gripper" && (
   <section
+    data-gripper-configurator-panel="true"
     style={{
       ...panelSectionStyle,
-      marginBottom: "12px"
+      marginBottom: "10px"
     }}
   >
     <h4
@@ -1781,94 +4074,73 @@ console.log(pieces);
         textAlign: "center"
       }}
     >
-      CONFIGURADOR CAPES
+      {t.gripperPanel.title}
     </h4>
 
     <div
       style={{
         display: "flex",
-        gap: "6px"
+        gap: "8px"
       }}
     >
       <button
         type="button"
-        onClick={
-          openNewPieceDialog
-        }
+        onClick={() => {
+          setIsGripperDialogOpen(
+            true
+          );
+        }}
         style={{
-          ...panelButtonStyle,
-          borderColor: "#2767c5",
+          flex: 1,
+          padding: "10px 7px",
+          border: "1px solid #2767c5",
+          borderRadius: "6px",
           background: "#2767c5",
-          color: "#ffffff"
+          color: "#ffffff",
+          fontWeight: 700,
+          cursor: "pointer"
         }}
       >
-        Nova peça
+        {t.gripperPanel.newGripper}
       </button>
 
       <button
         type="button"
-        onClick={
-          duplicatePiece
-        }
-        disabled={
-          !selectedData
-        }
+        disabled={!activeGripper}
+        onClick={() => {
+          setIsGripperVisible(
+            (currentValue) =>
+              !currentValue
+          );
+        }}
         style={{
-          ...panelButtonStyle,
-          background:
-            selectedData
+          flex: 1,
+          padding: "10px 7px",
+          border: !activeGripper
+            ? "1px solid #b8c0c8"
+            : isGripperVisible
+              ? "1px solid #168447"
+              : "1px solid #2767c5",
+          borderRadius: "6px",
+          background: !activeGripper
+            ? "#eceff2"
+            : isGripperVisible
+              ? "#168447"
+              : "#ffffff",
+          color: !activeGripper
+            ? "#7b848d"
+            : isGripperVisible
               ? "#ffffff"
-              : "#eceff2",
-          color:
-            selectedData
-              ? "#303840"
-              : "#7b848d",
-          opacity:
-            selectedData
-              ? 1
-              : 0.65,
-          cursor:
-            selectedData
-              ? "pointer"
-              : "not-allowed"
+              : "#2767c5",
+          fontWeight: 700,
+          cursor: activeGripper
+            ? "pointer"
+            : "not-allowed"
         }}
       >
-        Duplicar
-      </button>
-
-      <button
-        type="button"
-        onClick={
-          deletePiece
-        }
-        disabled={
-          !selectedData
-        }
-        style={{
-          ...panelButtonStyle,
-          borderColor:
-            selectedData
-              ? "#b02a37"
-              : "#c5cbd1",
-          background:
-            selectedData
-              ? "#ffffff"
-              : "#eceff2",
-          color:
-            selectedData
-              ? "#b02a37"
-              : "#7b848d",
-          opacity:
-            selectedData
-              ? 1
-              : 0.65,
-          cursor:
-            selectedData
-              ? "pointer"
-              : "not-allowed"
-        }}
-      >
-        Eliminar
+        {isGripperVisible
+          ? t.gripperPanel.hideGripper
+          : t.gripperPanel.showGripper}
       </button>
     </div>
   </section>
@@ -1876,16 +4148,301 @@ console.log(pieces);
 
 
 
-
-
-
-
-
+{activeConfigurator ===
+  "separators" && (
+  <PieceActionPanel
+    type="separator"
+    canAct={
+      selectedIsSeparator
+    }
+    onCreate={
+      openSeparatorDialog
+    }
+    onDuplicate={
+      duplicatePiece
+    }
+    onDelete={
+      deleteSelectedPieces
+    }
+    t={
+      t
+    }
+  />
+)}
 
 
 {activeConfigurator ===
-  "layers" &&
-  selectedData && (
+  "pieces" && (
+  <PieceActionPanel
+    type="piece"
+    canAct={
+      selectedIsRegularPiece
+    }
+    onCreate={
+      openNewPieceDialog
+    }
+    onDuplicate={
+      duplicatePiece
+    }
+    onDelete={
+      deleteSelectedPieces
+    }
+    t={
+      t
+    }
+  />
+)}
+
+
+{activeConfigurator ===
+  "layers" && (
+  <LayerConfigurator
+    layerName={
+      layerName
+    }
+    onNewLayer={
+      requestNewEmptyLayer
+    }
+    onLayerNameChange={
+      setLayerName
+    }
+    onSaveLayer={() => {
+      saveCurrentLayer();
+    }}
+    layers={
+      layers
+    }
+    activeLayerId={
+      activeLayerId
+    }
+    onSelectLayer={
+      requestLayerSelection
+    }
+    onDeleteLayer={
+      requestDeleteSavedLayer
+    }
+    isCurrentLayerDirty={
+      isCurrentLayerDirty
+    }
+
+showOrderIds={
+  showOrderIds
+}
+
+onToggleOrderIds={() => {
+  setShowOrderIds(
+    (currentValue) =>
+      !currentValue
+  );
+}}
+
+  
+
+    showGripperOffsets={
+      showGripperOffsets
+    }
+
+    onToggleGripperOffsets={() => {
+      setShowGripperOffsets(
+        (currentValue) =>
+          !currentValue
+      );
+    }}
+
+    selectedPiece={
+      selectedData
+    }
+
+    genericGripperOffsets={
+      currentLayerGripperOffsets
+    }
+
+    gripperOffsetPreviewMode={
+      gripperOffsetPreviewMode
+    }
+
+    onGripperOffsetPreviewModeChange={
+      changeGripperOffsetPreviewMode
+    }
+
+    onChangeGenericGripperOffset={
+      updateGenericGripperOffset
+    }
+
+    onChangePieceGripperOffset={
+      updatePieceGripperOffset
+    }
+
+    onUseGenericGripperOffsets={
+      clearPieceGripperOffsets
+    }
+    t={
+    t
+  }
+/>
+)}
+
+{activeConfigurator ===
+  "palletizing" && (
+  <PalletizingConfigurator
+    layers={
+      layers
+    }
+    sequence={
+      palletizingSequence
+    }
+    selectedInstanceId={
+      selectedPalletizingInstanceId
+    }
+    onAddLayer={
+      addLayerToPalletizing
+    }
+    onSelectInstance={
+      setSelectedPalletizingInstanceId
+    }
+    t={
+    t
+  }
+/>
+)}
+
+
+{activeConfigurator !==
+  "palletizing" &&
+  selectedPieceIds.length > 1 && (
+  <section
+    style={{
+      ...panelSectionStyle,
+      marginBottom: "10px"
+    }}
+  >
+    <h4
+      style={{
+        margin: "0 0 8px 0",
+        color: "#4f5870",
+        fontSize: "14px",
+        textAlign: "center"
+      }}
+    >
+      {t.selection.multipleTitle}
+    </h4>
+
+    <div
+      style={{
+        padding: "8px",
+        borderRadius: "5px",
+        background: "#eef4fb",
+        color: "#244d7c",
+        fontSize: "13px",
+        fontWeight: 700,
+        textAlign: "center"
+      }}
+    >
+      {selectedPieceIds.length}
+      {" "}
+      {t.selection.selectedElements}
+    </div>
+
+    <div
+      style={{
+        marginTop: "8px",
+        color: "#59636e",
+        fontSize: "12px",
+        lineHeight: 1.45
+      }}
+    >
+      {t.selection.help}
+    </div>
+
+    <div
+  style={{
+    marginTop: "10px"
+  }}
+>
+  <div
+    style={{
+      marginBottom: "8px",
+      textAlign: "center",
+      fontWeight: 700,
+      color: "#4f5870"
+    }}
+  >
+    {t.selection.groupMove}
+  </div>
+
+  <label
+    style={panelRowStyle}
+  >
+    X
+
+    <input
+      type="number"
+      value={groupMoveX}
+      onChange={(event) => {
+        setGroupMoveX(
+          event.target.value
+        );
+      }}
+      onKeyDown={(event) => {
+        if (
+          event.key === "Enter"
+        ) {
+          moveSelectedPieces(
+            groupMoveX || 0,
+            0
+          );
+
+          setGroupMoveX("");
+        }
+      }}
+      style={panelInputStyle}
+    />
+  </label>
+
+  <label
+    style={panelRowStyle}
+  >
+    Y
+
+    <input
+      type="number"
+      value={groupMoveY}
+      onChange={(event) => {
+        setGroupMoveY(
+          event.target.value
+        );
+      }}
+      onKeyDown={(event) => {
+        if (
+          event.key === "Enter"
+        ) {
+          moveSelectedPieces(
+            0,
+            groupMoveY || 0
+          );
+
+          setGroupMoveY("");
+        }
+      }}
+      style={panelInputStyle}
+    />
+  </label>
+
+  <div
+    style={{
+      marginTop: "6px",
+      fontSize: "12px",
+      color: "#59636e"
+    }}
+  >
+    {t.selection.groupMoveHelp}
+  </div>
+</div>
+  </section>
+)}
+
+
+{shouldShowSelectedData && (
 <>
 
 <h3
@@ -1898,7 +4455,9 @@ console.log(pieces);
     letterSpacing: "0.4px"
   }}
 >
-  PEÇA SELECCIONADA
+  {selectedIsSeparator
+  ? t.separators.selected
+  : t.pieces.selected}
 </h3>
 
 
@@ -1915,8 +4474,10 @@ console.log(pieces);
       marginBottom: "4px"
     }}
   >
-    <strong>ID:</strong>{" "}
-    {selectedData.id}
+    <strong>
+  {t.common.id}:
+</strong>{" "}
+    {selectedData.orderId}
   </div>
 
   <div
@@ -1925,9 +4486,15 @@ console.log(pieces);
       marginBottom: "4px"
     }}
   >
-    <strong>Nom:</strong>{" "}
+    <strong>
+  {t.common.name}:
+</strong>{" "}
     {selectedData.name ??
-      `Peça ${selectedData.id}`}
+  (
+    selectedIsSeparator
+      ? `Separador ${selectedData.id}`
+      : `Peça ${selectedData.id}`
+  )}
   </div>
 
 </section>
@@ -1935,7 +4502,14 @@ console.log(pieces);
 
 
 
+
+
+
+
+
 <section
+
+
   style={{
     ...panelSectionStyle,
     marginBottom: "10px"
@@ -1949,17 +4523,17 @@ console.log(pieces);
       textAlign: "center"
     }}
   >
-    Referència TCP Robot 
+    {t.reference.robotTcp} 
   </h4>
 
-
+{!selectedIsSeparator && (
   <label
     style={{
       ...panelRowStyle,
       marginBottom: 0
     }}
   >
-    Cara contacte
+    {t.reference.contactFace}
 
     <select
       value={
@@ -1986,22 +4560,50 @@ console.log(pieces);
       }}
       style={panelSelectStyle}
     >
-      {REFERENCE_POINT_OPTIONS.map(
-        (option) => (
+      {getReferencePointOptions(
+  selectedData
+).map(
+  (option) => (
           <option
             key={option.value}
             value={option.value}
           >
-            {option.label}
+            {t?.reference?.points?.[
+              option.value
+            ] ?? option.label}
           </option>
         )
       )}
+      
     </select>
   </label>
+)}
+
+{selectedIsSeparator && (
+  <div
+    style={{
+      marginBottom: "9px",
+      padding: "7px",
+      borderRadius: "5px",
+      background: "#eef1f4",
+      color: "#34404b",
+      fontSize: "13px",
+      fontWeight: 700,
+      textAlign: "center"
+    }}
+  >
+    TOP_CENTER
+  </div>
+)}
+
+
+
+
+
 
   <label style={panelRowStyle}>
   <span>
-    Face Offset X
+    {t.reference.faceOffsetX}
   </span>
 
   <input
@@ -2021,7 +4623,7 @@ console.log(pieces);
 
   <label style={panelRowStyle}>
   <span>
-    Face Offset Y
+    {t.reference.faceOffsetY}
   </span>
 
   <input
@@ -2041,7 +4643,7 @@ console.log(pieces);
 
   <label style={panelRowStyle}>
   <span>
-    Face Rotation
+    {t.reference.faceRotation}
   </span>
 
   <input
@@ -2076,7 +4678,9 @@ console.log(pieces);
       textAlign: "center"
     }}
   >
-    Posició Peça
+    {selectedIsSeparator
+      ? t.separators.position
+      : t.pieces.position}
   </h4>
 
   <label style={panelRowStyle}>
@@ -2227,7 +4831,7 @@ console.log(pieces);
       textAlign: "center"
     }}
   >
-    Orientació referència
+    {t.reference.orientation}
   </h4>
 
   <label style={panelRowStyle}>
@@ -2304,6 +4908,9 @@ console.log(pieces);
   onCreatePiece={
     createPieceFromDialog
   }
+  t={
+    t
+  }
 />
 
 <PalletDialog
@@ -2315,6 +4922,7 @@ console.log(pieces);
     );
   }}
   onApplyPallet={applyPallet}
+  t={t}
 />
 
 <OpenProjectDialog
@@ -2331,67 +4939,29 @@ console.log(pieces);
   }
 />
 
-<div
-  style={{
-    position: "fixed",
-    right: "18px",
-    bottom: "18px",
-    zIndex: 1000,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "flex-end",
-    gap: "8px"
+<LanguageJokeButton
+  visible={
+    isLanguageMessageVisible
+  }
+  onToggle={() => {
+    setIsLanguageMessageVisible(
+      (currentValue) =>
+        !currentValue
+    );
   }}
->
-  {isLanguageMessageVisible && (
-    <div
-      style={{
-        padding: "8px 11px",
-        border: "1px solid #b9d2f5",
-        borderRadius: "6px",
-        background: "#ffffff",
-        color: "#2767c5",
-        fontSize: "13px",
-        fontWeight: 700,
-        boxShadow:
-          "0 4px 14px rgba(0, 0, 0, 0.14)"
-      }}
-    >
-      https://www.amazon.es/diccionario-catalan-castellano/s?k=diccionario+catalan+castellano
-    </div>
-  )}
-
-  <button
-    type="button"
-    aria-label="Canviar idioma"
-    title="Canviar idioma"
-    onClick={() => {
-      setIsLanguageMessageVisible(
-        (currentValue) =>
-          !currentValue
-      );
-    }}
-    style={{
-      width: "46px",
-      height: "46px",
-      display: "flex",
-      alignItems: "center",
-      justifyContent: "center",
-      padding: 0,
-      border: "1px solid #2767c5",
-      borderRadius: "8px",
-      background: "#ffffff",
-      color: "#2767c5",
-      fontSize: "24px",
-      lineHeight: 1,
-      cursor: "pointer",
-      boxShadow:
-        "0 5px 16px rgba(0, 0, 0, 0.18)"
-    }}
-  >
-    🌐
-  </button>
-</div>
+  activeLanguage={
+    activeLanguage
+  }
+  availableLanguages={
+    availableLanguages
+  }
+  onChangeLanguage={
+    setActiveLanguage
+  }
+  t={
+    t
+  }
+/>
 
 
 
@@ -2403,14 +4973,23 @@ console.log(pieces);
     saveProjectSuggestedName
   }
   onCancel={() => {
+    if (
+      isSavingProjectRef.current
+    ) {
+      return;
+    }
+
     setIsSaveProjectDialogOpen(
       false
     );
   }}
-  onSave={
-    confirmSaveCurrentProjectAs
-  }
+  onSave={(projectName) => {
+    confirmSaveCurrentProjectAs(
+      projectName
+    );
+  }}
 />
+
 
 <ConfirmDialog
   open={
@@ -2425,6 +5004,10 @@ console.log(pieces);
   confirmLabel={
     confirmDialog.confirmLabel
   }
+  cancelLabel={
+    confirmDialog.cancelLabel
+  }
+
   destructive={
     confirmDialog.destructive
   }
@@ -2435,8 +5018,90 @@ console.log(pieces);
     closeConfirmDialog
   }
 />
+
+<GripperDialog
+  open={
+    isGripperDialogOpen
+  }
+  activeGripper={
+    activeGripper
+  }
+  onClose={() => {
+    setIsGripperDialogOpen(
+      false
+    );
+  }}
+  onApplyGripper={
+    applyGripper
+  }
+  t={
+    t
+  }
+/>
+
+<SeparatorDialog
+open={
+isSeparatorDialogOpen
+}
+onClose={() => {
+setIsSeparatorDialogOpen(
+false
+);
+}}
+onCreateSeparator={
+createSeparatorFromDialog
+}
+  t={
+    t
+  }
+/>
+
+<UnsavedLayerDialog
+  open={
+    isUnsavedLayerDialogOpen
+  }
+  currentLayerName={
+    activeLayer?.name ??
+    layerName
+  }
+  onSave={
+    savePendingLayerChanges
+  }
+  onDiscard={
+    discardPendingLayerChanges
+  }
+  onCancel={
+    cancelPendingLayerSelection
+  }
+  t={
+    t
+  }
+/>
+<LayerOrderIdErrorDialog
+  open={
+    orderIdErrorDialog.open
+  }
+  message={
+    orderIdErrorDialog.message
+  }
+  onAccept={() => {
+    setOrderIdErrorDialog({
+      open: false,
+      message: ""
+    });
+  }}
+  t={
+    t
+  }
+/>
+
 </>
  );
 
 }
+
+
+
+
+
 

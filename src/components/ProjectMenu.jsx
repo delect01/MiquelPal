@@ -1,10 +1,20 @@
-// project menu
-
 import {
   useEffect,
   useRef,
   useState
 } from "react";
+
+function translated(
+  value,
+  fallback
+) {
+  return (
+    typeof value === "string" &&
+    value.trim()
+      ? value
+      : fallback
+  );
+}
 
 export default function ProjectMenu({
   projectName,
@@ -12,29 +22,21 @@ export default function ProjectMenu({
   onNewProject,
   onOpenProject,
   onSaveProject,
-  onSaveProjectAs
+  onSaveProjectAs,
+  t
 }) {
-  const [
-    isMenuOpen,
-    setIsMenuOpen
-  ] = useState(false);
-
+  const [isMenuOpen, setIsMenuOpen] =
+    useState(false);
   const menuContainerRef =
     useRef(null);
 
   useEffect(() => {
-    function handlePointerDown(
-      event
-    ) {
+    function handlePointerDown(event) {
       if (
-        !menuContainerRef.current
-      ) {
-        return;
-      }
-
-      if (
-        menuContainerRef.current
-          .contains(event.target)
+        !menuContainerRef.current ||
+        menuContainerRef.current.contains(
+          event.target
+        )
       ) {
         return;
       }
@@ -55,12 +57,41 @@ export default function ProjectMenu({
     };
   }, []);
 
-  function executeMenuAction(
-    action
-  ) {
+  function executeMenuAction(action) {
     setIsMenuOpen(false);
     action();
   }
+
+  const labels = {
+    menu: translated(
+      t?.projectMenu?.title,
+      "Projecte"
+    ),
+    unsaved: translated(
+      t?.projectMenu?.unsaved,
+      "Canvis sense guardar"
+    ),
+    saved: translated(
+      t?.projectMenu?.saved,
+      "Projecte guardat"
+    ),
+    newProject: translated(
+      t?.projectMenu?.newProject,
+      "Nou projecte"
+    ),
+    openProject: translated(
+      t?.projectMenu?.openProject,
+      "Obrir projecte"
+    ),
+    save: translated(
+      t?.projectMenu?.save,
+      "Guardar"
+    ),
+    saveAs: translated(
+      t?.projectMenu?.saveAs,
+      "Guardar com a..."
+    )
+  };
 
   const menuItemStyle = {
     width: "100%",
@@ -100,8 +131,7 @@ export default function ProjectMenu({
           style={{
             height: "34px",
             padding: "0 12px",
-            border:
-              "1px solid #2767c5",
+            border: "1px solid #2767c5",
             borderRadius: "6px",
             background: "#2767c5",
             color: "#ffffff",
@@ -110,12 +140,8 @@ export default function ProjectMenu({
             cursor: "pointer"
           }}
         >
-          Projecte
-          <span
-            style={{
-              marginLeft: "7px"
-            }}
-          >
+          {labels.menu}
+          <span style={{ marginLeft: "7px" }}>
             ▼
           </span>
         </button>
@@ -144,15 +170,14 @@ export default function ProjectMenu({
 
           <div
             style={{
-              color:
-                hasUnsavedChanges
-                  ? "#b36b00"
-                  : "#66717c"
+              color: hasUnsavedChanges
+                ? "#b36b00"
+                : "#66717c"
             }}
           >
             {hasUnsavedChanges
-              ? "Canvis sense guardar"
-              : "Projecte guardat"}
+              ? labels.unsaved
+              : labels.saved}
           </div>
         </div>
       </div>
@@ -166,8 +191,7 @@ export default function ProjectMenu({
             zIndex: 2000,
             width: "190px",
             padding: "5px",
-            border:
-              "1px solid #c6ccd2",
+            border: "1px solid #c6ccd2",
             borderRadius: "7px",
             background: "#ffffff",
             boxShadow:
@@ -183,7 +207,7 @@ export default function ProjectMenu({
             }}
             style={menuItemStyle}
           >
-            Nou projecte
+            {labels.newProject}
           </button>
 
           <button
@@ -195,7 +219,7 @@ export default function ProjectMenu({
             }}
             style={menuItemStyle}
           >
-            Obrir projecte
+            {labels.openProject}
           </button>
 
           <div
@@ -215,7 +239,7 @@ export default function ProjectMenu({
             }}
             style={menuItemStyle}
           >
-            Guardar
+            {labels.save}
           </button>
 
           <button
@@ -227,7 +251,7 @@ export default function ProjectMenu({
             }}
             style={menuItemStyle}
           >
-            Guardar com a...
+            {labels.saveAs}
           </button>
         </div>
       )}

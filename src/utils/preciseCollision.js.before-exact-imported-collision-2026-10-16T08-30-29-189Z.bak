@@ -1,0 +1,66 @@
+import * as THREE from "three";
+import { COLLISION_CONFIG } from "../Config/geometryConfig";
+import { getPieceWorldVertices, getPieceFaces, getPieceEdges } from "./pieceGeometry";
+import { exactMeshesCollide } from "./exactImportedCollision";
+
+const EPSILON = 1e-10;
+function addAxis(axes, axis) {
+  if (axis.lengthSq() < EPSILON) return;
+  const normalized = axis.clone().normalize();
+  if (!axes.some((existing) => Math.abs(existing.dot(normalized)) > 0.999999)) {
+    axes.push(normalized);
+  }
+}
+function normals(vertices, faces) {
+  const result = [];
+  faces.forEach((face) => {
+    if (face.length < 3) return;
+    addAxis(result, new THREE.Vector3().crossVectors(
+      vertices[face[1]].clone().sub(vertices[face[0]]),
+      vertices[face[2]].clone().sub(vertices[face[0]])
+    ));
+  });
+  return result;
+}
+function directions(vertices, edges) {
+  const result = [];
+  edges.forEach(([a, b]) => addAxis(result, vertices[b].clone().sub(vertices[a])));
+  return result;
+}
+function project(vertices, axis) {
+  let minimum = Infinity, maximum = -Infinity;
+  vertices.forEach((vertex) => {
+    const value = vertex.dot(axis);
+    minimum = Math.min(minimum, value);
+    maximum = Math.max(maximum, value);
+  });
+  return { minimum, maximum };
+}
+function sat(pieceA, pieceB) {
+  const verticesA = getPieceWorldVertices(pieceA);
+  const verticesB = getPieceWorldVertices(pieceB);
+  if (verticesA.length < 4 || verticesB.length < 4) return false;
+  const edgesA = directions(verticesA, getPieceEdges(pieceA));
+  const edgesB = directions(verticesB, getPieceEdges(pieceB));
+  const axes = [];
+  [...normals(verticesA, getPieceFaces(pieceA)), ...normals(verticesB, getPieceFaces(pieceB))]
+    .forEach((axis) => addAxis(axes, axis));
+  for (const edgeA of edgesA) for (const edgeB of edgesB) {
+    addAxis(axes, new THREE.Vector3().crossVectors(edgeA, edgeB));
+  }
+  const tolerance = COLLISION_CONFIG.tolerance;
+  for (const axis of axes) {
+    const a = project(verticesA, axis);
+    const b = project(verticesB, axis);
+    if (a.maximum < b.minimum - tolerance || b.maximum < a.minimum - tolerance) return false;
+  }
+  return true;
+}
+
+export function arePiecesPreciselyColliding(pieceA, pieceB) {
+  if (pieceA.pieceType === "IMPORTED_3D" || pieceB.pieceType === "IMPORTED_3D") {
+    const exact = exactMeshesCollide(pieceA, pieceB, COLLISION_CONFIG.tolerance);
+    if (exact !== null) return exact;
+  }
+  return sat(pieceA, pieceB);
+}

@@ -1,0 +1,126 @@
+import {
+  useEffect,
+  useMemo,
+  useState
+} from "react";
+import {
+  getLanguageDirection,
+  getTranslator,
+  SUPPORTED_LANGUAGES
+} from "../i18n/traductor.js";
+
+const LANGUAGE_STORAGE_KEY =
+  "pallet-simulator-language";
+const LANGUAGE_CHANGE_EVENT =
+  "pallet-simulator-language-change";
+
+function getInitialLanguage(
+  fallbackLanguage
+) {
+  try {
+    const storedLanguage =
+      window.localStorage.getItem(
+        LANGUAGE_STORAGE_KEY
+      );
+
+    return SUPPORTED_LANGUAGES.some(
+      (language) =>
+        language.code ===
+        storedLanguage
+    )
+      ? storedLanguage
+      : fallbackLanguage;
+  } catch {
+    return fallbackLanguage;
+  }
+}
+
+export default function useTranslator(
+  initialLanguage = "ca"
+) {
+  const [
+    activeLanguage,
+    setActiveLanguage
+  ] = useState(() =>
+    getInitialLanguage(
+      initialLanguage
+    )
+  );
+
+  const t = useMemo(
+    () =>
+      getTranslator(
+        activeLanguage
+      ),
+    [activeLanguage]
+  );
+
+  const languageDirection = useMemo(
+    () =>
+      getLanguageDirection(
+        activeLanguage
+      ),
+    [activeLanguage]
+  );
+
+  useEffect(() => {
+    function handleLanguageChange(
+      event
+    ) {
+      const nextLanguage =
+        event.detail?.language;
+
+      if (
+        SUPPORTED_LANGUAGES.some(
+          (language) =>
+            language.code ===
+            nextLanguage
+        )
+      ) {
+        setActiveLanguage(
+          nextLanguage
+        );
+      }
+    }
+
+    window.addEventListener(
+      LANGUAGE_CHANGE_EVENT,
+      handleLanguageChange
+    );
+
+    return () => {
+      window.removeEventListener(
+        LANGUAGE_CHANGE_EVENT,
+        handleLanguageChange
+      );
+    };
+  }, []);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(
+        LANGUAGE_STORAGE_KEY,
+        activeLanguage
+      );
+    } catch {
+      // Continuem sense persistencia.
+    }
+
+    document.documentElement.lang =
+      activeLanguage;
+    document.documentElement.dir =
+      languageDirection;
+  }, [
+    activeLanguage,
+    languageDirection
+  ]);
+
+  return {
+    activeLanguage,
+    setActiveLanguage,
+    languageDirection,
+    availableLanguages:
+      SUPPORTED_LANGUAGES,
+    t
+  };
+}

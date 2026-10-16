@@ -1,514 +1,397 @@
-//DraggablePiece
-
-import { useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import * as THREE from "three";
 import { Edges } from "@react-three/drei";
-import { getPieceCenter, getReferenceAxes, palletEulerToThreeQuaternion, getReferenceWorldPositionThree } from "../utils/pieceUtils";
+import {
+  getPieceCenter,
+  getReferenceAxes,
+  palletEulerToThreeQuaternion,
+  getReferenceWorldPositionThree
+} from "../utils/pieceUtils";
 import { getPieceLocalVertices } from "../utils/pieceGeometry";
+import ImportedPieceModel from "./ImportedPieceModel.jsx";
+import ImportedCollisionOutline from "./ImportedCollisionOutline.jsx";
+
+const DRAG_START_DISTANCE_PX = 6;
+const DIMMED_OPACITY = 0.24;
 
 export default function DraggablePiece({
   piece,
   selected,
   colliding,
   outside,
+  dimmed = false,
   onSelect,
   onMove,
   onDragStart,
-  onDragEnd
+  onDragEnd,
+  onReplicationStart,
+  onReplicationMove,
+  onReplicationEnd,
+  onReplicationCancel
 }) {
+  const isPointerDown = useRef(false);
+  const hasStartedDrag = useRef(false);
+  const isReplicating = useRef(false);
+  const wantsReplication = useRef(false);
+  const capturedTarget = useRef(null);
+  const capturedPointerId = useRef(null);
+  const pointerDownScreenPosition = useRef({ x: 0, y: 0 });
 
+  const dragPlane = useMemo(() => new THREE.Plane(), []);
+  const intersectionPoint = useMemo(() => new THREE.Vector3(), []);
+  const dragOffset = useMemo(() => new THREE.Vector3(), []);
 
-
-  const isDragging = useRef(false);
-
-  const dragPlane = useMemo(
-    () => new THREE.Plane(),
-    []
-  );
-
-  const intersectionPoint = useMemo(
-    () => new THREE.Vector3(),
-    []
-  );
-
-  const dragOffset = useMemo(
-    () => new THREE.Vector3(),
-    []
-  );
-
-
-
-const pieceCenter =
-  getPieceCenter(piece);
-
-  const referenceWorldPosition =
-  getReferenceWorldPositionThree(
-    piece
-  );
-
-  const pieceThreeQuaternion =
-  palletEulerToThreeQuaternion(
+  const pieceCenter = getPieceCenter(piece);
+  const referenceWorldPosition = getReferenceWorldPositionThree(piece);
+  const pieceThreeQuaternion = palletEulerToThreeQuaternion(
     piece.rxDeg,
     piece.ryDeg,
     piece.rzDeg
   );
+  const referenceAxes = getReferenceAxes(piece, true, true);
 
-const referenceAxes =
-  getReferenceAxes(
-    piece,
-    true,
-    true
-  );
+  const isImportedPiece =
+    piece.pieceType === "IMPORTED_3D" && Boolean(piece.modelId);
 
+  const importedVisualState = selected
+    ? "selected"
+    : colliding
+      ? "colliding"
+      : outside
+        ? "outside"
+        : "normal";
 
-  const frameHandedness =
-  referenceAxes.tangentX
-    .clone()
-    .cross(
-      referenceAxes.tangentY
-    )
-    .dot(
-      referenceAxes.toolZ
-    );
+  const stateColor = selected
+    ? "white"
+    : colliding
+      ? "cyan"
+      : outside
+        ? "#d6a900"
+        : "black";
 
-console.log(
-  "TCP FRAME CHECK",
-  {
-    x: referenceAxes.tangentX,
-    y: referenceAxes.tangentY,
-    z: referenceAxes.toolZ,
-    handedness:
-      frameHandedness
-  }
-);
+  const arrowDependencies = [
+    piece.referencePoint,
+    piece.faceRotationDeg,
+    piece.rxDeg,
+    piece.ryDeg,
+    piece.rzDeg,
+    piece.pieceType,
+    piece.width,
+    piece.height,
+    piece.depth,
+    piece.topWidth,
+    piece.topDepth,
+    piece.collisionGeometry
+  ];
 
-  
-const xArrow = useMemo(
-  () =>
-    new THREE.ArrowHelper(
-      referenceAxes.tangentX
-        .clone()
-        .normalize(),
-      new THREE.Vector3(
-        0,
-        0,
-        0
-      ),
-      300,
+  const xArrow = useMemo(
+    () => new THREE.ArrowHelper(
+      referenceAxes.tangentX.clone().normalize(),
+      new THREE.Vector3(0, 0, 0),
+      150,
       0xff0000
     ),
-  [
-    piece.referencePoint,
-    piece.faceRotationDeg,
-    piece.rxDeg,
-    piece.ryDeg,
-    piece.rzDeg,
-    piece.pieceType,
-    piece.width,
-    piece.height,
-    piece.depth,
-    piece.topWidth,
-    piece.topDepth
-  ]
-);
+    arrowDependencies
+  );
 
-  
-
-
-const yArrow = useMemo(
-  () =>
-    new THREE.ArrowHelper(
-      referenceAxes.tangentY
-        .clone()
-        .normalize(),
-      new THREE.Vector3(
-        0,
-        0,
-        0
-      ),
-      300,
+  const yArrow = useMemo(
+    () => new THREE.ArrowHelper(
+      referenceAxes.tangentY.clone().normalize(),
+      new THREE.Vector3(0, 0, 0),
+      150,
       0x00ff00
     ),
-  [
-    piece.referencePoint,
-    piece.faceRotationDeg,
-    piece.rxDeg,
-    piece.ryDeg,
-    piece.rzDeg,
-    piece.pieceType,
-    piece.width,
-    piece.height,
-    piece.depth,
-    piece.topWidth,
-    piece.topDepth
-  ]
-);
+    arrowDependencies
+  );
 
-
-const zArrow = useMemo(
-  () =>
-    new THREE.ArrowHelper(
-      referenceAxes.toolZ
-        .clone()
-        .normalize(),
-      new THREE.Vector3(
-        0,
-        0,
-        0
-      ),
-      300,
+  const zArrow = useMemo(
+    () => new THREE.ArrowHelper(
+      referenceAxes.toolZ.clone().normalize(),
+      new THREE.Vector3(0, 0, 0),
+      150,
       0x0000ff
     ),
-  [
-    piece.referencePoint,
-    piece.faceRotationDeg,
-    piece.rxDeg,
-    piece.ryDeg,
-    piece.rzDeg,
-    piece.pieceType,
-    piece.width,
-    piece.height,
-    piece.depth,
-    piece.topWidth,
-    piece.topDepth
-  ]
-);
+    arrowDependencies
+  );
 
+  function getSourceEvent(event) {
+    return event.nativeEvent ?? event.sourceEvent ?? event;
+  }
 
+  function releasePointerCapture() {
+    const target = capturedTarget.current;
+    const pointerId = capturedPointerId.current;
 
+    if (
+      target &&
+      pointerId !== null &&
+      typeof target.hasPointerCapture === "function" &&
+      target.hasPointerCapture(pointerId)
+    ) {
+      target.releasePointerCapture(pointerId);
+    }
 
+    capturedTarget.current = null;
+    capturedPointerId.current = null;
+  }
+
+  function resetInteraction() {
+    isPointerDown.current = false;
+    hasStartedDrag.current = false;
+    isReplicating.current = false;
+    wantsReplication.current = false;
+    releasePointerCapture();
+  }
+
+  function finishInteraction() {
+    const interactionWasActive = isPointerDown.current;
+    resetInteraction();
+    if (interactionWasActive) onDragEnd();
+  }
+
+  useEffect(() => {
+    function handleEscape(event) {
+      if (event.key !== "Escape" || !isPointerDown.current) return;
+      event.preventDefault();
+      event.stopPropagation();
+      if (isReplicating.current) onReplicationCancel();
+      finishInteraction();
+    }
+
+    window.addEventListener("keydown", handleEscape, true);
+    return () => window.removeEventListener("keydown", handleEscape, true);
+  }, [onReplicationCancel, onDragEnd]);
 
   function handlePointerDown(event) {
     event.stopPropagation();
+    const sourceEvent = getSourceEvent(event);
+    sourceEvent.piecePointerHandled = true;
 
-    onSelect(piece.id);
-    onDragStart();
+    dragPlane.set(new THREE.Vector3(0, 1, 0), -pieceCenter.y);
+    const intersection = event.ray.intersectPlane(dragPlane, intersectionPoint);
+    if (!intersection) return;
 
-    isDragging.current = true;
+    const canReplicate =
+      sourceEvent.ctrlKey && piece.pieceCategory !== "SEPARATOR";
+    const additiveSelection =
+      sourceEvent.shiftKey ||
+      (sourceEvent.ctrlKey && piece.pieceCategory === "SEPARATOR");
 
-    dragPlane.set(
-      new THREE.Vector3(0, 1, 0),
-      -piece.y
+    if (canReplicate) onSelect(piece.id, false);
+    else if (additiveSelection) onSelect(piece.id, true);
+    else if (!selected) onSelect(piece.id, false);
+
+    dragOffset.set(
+      pieceCenter.x - intersection.x,
+      0,
+      pieceCenter.z - intersection.z
     );
 
-    const intersection = event.ray.intersectPlane(
-      dragPlane,
-      intersectionPoint
-    );
+    pointerDownScreenPosition.current = {
+      x: Number(sourceEvent.clientX) || 0,
+      y: Number(sourceEvent.clientY) || 0
+    };
 
-dragOffset.set(
-  pieceCenter.x - intersection.x,
-  0,
-  pieceCenter.z - intersection.z
-);
+    isPointerDown.current = true;
+    hasStartedDrag.current = false;
+    isReplicating.current = false;
+    wantsReplication.current = canReplicate;
 
-    event.target.setPointerCapture(event.pointerId);
+    onDragStart(piece.id, pieceCenter.x, pieceCenter.z);
+    capturedTarget.current = event.currentTarget;
+    capturedPointerId.current = event.pointerId;
+    event.currentTarget.setPointerCapture(event.pointerId);
   }
 
   function handlePointerMove(event) {
-    if (!isDragging.current) return;
-
+    if (!isPointerDown.current) return;
     event.stopPropagation();
+    const sourceEvent = getSourceEvent(event);
 
-    const intersection = event.ray.intersectPlane(
-      dragPlane,
-      intersectionPoint
-    );
+    if (!hasStartedDrag.current) {
+      const deltaScreenX =
+        (Number(sourceEvent.clientX) || 0) - pointerDownScreenPosition.current.x;
+      const deltaScreenY =
+        (Number(sourceEvent.clientY) || 0) - pointerDownScreenPosition.current.y;
 
+      if (Math.hypot(deltaScreenX, deltaScreenY) < DRAG_START_DISTANCE_PX) {
+        return;
+      }
+
+      hasStartedDrag.current = true;
+      if (wantsReplication.current) {
+        isReplicating.current = true;
+        onReplicationStart(piece.id, pieceCenter.x, pieceCenter.z);
+      }
+    }
+
+    const intersection = event.ray.intersectPlane(dragPlane, intersectionPoint);
     if (!intersection) return;
 
-    onMove(
-      piece.id,
-      intersection.x + dragOffset.x,
-      intersection.z + dragOffset.z
-    );
+    const nextThreeX = intersection.x + dragOffset.x;
+    const nextThreeZ = intersection.z + dragOffset.z;
+
+    if (isReplicating.current) {
+      onReplicationMove(nextThreeX, nextThreeZ);
+      return;
+    }
+
+    onMove(piece.id, nextThreeX, nextThreeZ);
   }
 
   function handlePointerUp(event) {
-    if (!isDragging.current) return;
-
+    if (!isPointerDown.current) return;
     event.stopPropagation();
-
-    isDragging.current = false;
-
-    if (event.target.hasPointerCapture(event.pointerId)) {
-      event.target.releasePointerCapture(event.pointerId);
-    }
-
-    onDragEnd();
+    if (hasStartedDrag.current && isReplicating.current) onReplicationEnd();
+    finishInteraction();
   }
 
-
-
-const trapezoidGeometry = useMemo(() => {
-  if (
-    piece.pieceType !==
-    "TRAPEZOIDAL"
-  ) {
-    return null;
+  function handlePointerCancel(event) {
+    if (!isPointerDown.current) return;
+    event.stopPropagation();
+    if (isReplicating.current) onReplicationCancel();
+    finishInteraction();
   }
 
-  /*
-    Obtenim els mateixos vèrtexs que
-    després utilitzaran les col·lisions.
-  */
-  const localVertices =
-    getPieceLocalVertices(piece);
+  const trapezoidGeometry = useMemo(() => {
+    if (piece.pieceType !== "TRAPEZOIDAL") return null;
 
-  /*
-    BufferGeometry necessita un array pla:
-
-    x1, y1, z1,
-    x2, y2, z2...
-  */
-  const vertices =
-    localVertices.flatMap(
-      (vertex) => [
-        vertex.x,
-        vertex.y,
-        vertex.z
-      ]
+    const vertices = getPieceLocalVertices(piece).flatMap(
+      (vertex) => [vertex.x, vertex.y, vertex.z]
     );
+    const indices = [
+      0, 1, 2, 0, 2, 3,
+      4, 6, 5, 4, 7, 6,
+      0, 4, 5, 0, 5, 1,
+      1, 5, 6, 1, 6, 2,
+      2, 6, 7, 2, 7, 3,
+      3, 7, 4, 3, 4, 0
+    ];
 
-  const indices = [
-    /*
-      Base inferior
-    */
+    const geometry = new THREE.BufferGeometry();
+    geometry.setAttribute(
+      "position",
+      new THREE.Float32BufferAttribute(vertices, 3)
+    );
+    geometry.setIndex(indices);
+    geometry.computeVertexNormals();
+    return geometry;
+  }, [
+    piece.width,
+    piece.depth,
+    piece.height,
+    piece.topWidth,
+    piece.topDepth,
+    piece.pieceType
+  ]);
 
-    0, 1, 2,
-    0, 2, 3,
+  useEffect(() => () => trapezoidGeometry?.dispose(), [trapezoidGeometry]);
 
-    /*
-      Part superior
-    */
+  const parametricOpacity = dimmed ? DIMMED_OPACITY : 1;
 
-    4, 6, 5,
-    4, 7, 6,
-
-    /*
-      Cara lateral 1
-    */
-
-    0, 4, 5,
-    0, 5, 1,
-
-    /*
-      Cara lateral 2
-    */
-
-    1, 5, 6,
-    1, 6, 2,
-
-    /*
-      Cara lateral 3
-    */
-
-    2, 6, 7,
-    2, 7, 3,
-
-    /*
-      Cara lateral 4
-    */
-
-    3, 7, 4,
-    3, 4, 0
-  ];
-
-  const geometry =
-    new THREE.BufferGeometry();
-
-  geometry.setAttribute(
-    "position",
-    new THREE.Float32BufferAttribute(
-      vertices,
-      3
-    )
-  );
-
-  geometry.setIndex(indices);
-
-  geometry.computeVertexNormals();
-
-  return geometry;
-}, [
-  piece.width,
-  piece.depth,
-  piece.height,
-  piece.topWidth,
-  piece.topDepth,
-  piece.pieceType
-]);
-
-
-
-return (
-  <>
-
-    {/* PEÇA PRINCIPAL */}
-
-    <mesh
-      position={[
-        pieceCenter.x,
-        pieceCenter.y,
-        pieceCenter.z
-      ]}
-
-      quaternion={[
-        pieceThreeQuaternion.x,
-        pieceThreeQuaternion.y,
-        pieceThreeQuaternion.z,
-        pieceThreeQuaternion.w
-      ]}
-
-      castShadow
-      receiveShadow
-
-      onClick={(event) => {
-        event.stopPropagation();
-        onSelect(piece.id);
-      }}
-
-      onPointerDown={
-        handlePointerDown
-      }
-
-      onPointerMove={
-        handlePointerMove
-      }
-
-      onPointerUp={
-        handlePointerUp
-      }
-    >
-
-      {
-        piece.pieceType ===
-        "TRAPEZOIDAL"
-          ? (
-              <primitive
-                object={
-                  trapezoidGeometry
-                }
-                attach="geometry"
-              />
-            )
-          : (
-              <boxGeometry
-                args={[
-                  piece.width,
-                  piece.height,
-                  piece.depth
-                ]}
-              />
-            )
-      }
-
-      <meshStandardMaterial
-        color={
-          colliding
-            ? "blue"
-            : outside
-              ? "yellow"
-              : selected
-                ? "red"
-                : "orange"
-        }
-        roughness={0.65}
-        metalness={0}
-      />
-
-      <Edges
-        threshold={15}
-        color={
-          colliding
-            ? "cyan"
-            : selected
-              ? "white"
-              : "black"
-        }
-      />
-
-    </mesh>
-
-
-    {/* BOLA DEL PUNT TCP */}
-
-    <mesh
-      position={[
-        referenceWorldPosition.x,
-        referenceWorldPosition.y,
-        referenceWorldPosition.z
-      ]}
-    >
-
-      <sphereGeometry
-        args={[
-          15,
-          16,
-          16
+  return (
+    <>
+      <group
+        position={[pieceCenter.x, pieceCenter.y, pieceCenter.z]}
+        quaternion={[
+          pieceThreeQuaternion.x,
+          pieceThreeQuaternion.y,
+          pieceThreeQuaternion.z,
+          pieceThreeQuaternion.w
         ]}
-      />
+      >
+        {isImportedPiece && (
+          <>
+            <ImportedPieceModel
+              modelId={piece.modelId}
+              bottomFace={piece.modelBottomFace ?? "NEGATIVE_Y"}
+              visualState={importedVisualState}
+              dimmed={dimmed}
+            />
 
-      <meshStandardMaterial
-        color="lime"
-      />
+            <ImportedCollisionOutline
+              collisionGeometry={piece.collisionGeometry}
+              color={stateColor}
+              visible={selected || colliding || outside}
+            />
+          </>
+        )}
 
-    </mesh>
+        <mesh
+          castShadow={!isImportedPiece && !dimmed}
+          receiveShadow={!isImportedPiece}
+          onClick={(event) => event.stopPropagation()}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={handlePointerUp}
+          onPointerCancel={handlePointerCancel}
+        >
+          {piece.pieceType === "TRAPEZOIDAL" ? (
+            <primitive object={trapezoidGeometry} attach="geometry" />
+          ) : (
+            <boxGeometry args={[piece.width, piece.height, piece.depth]} />
+          )}
 
+          <meshStandardMaterial
+            color={
+              selected
+                ? "red"
+                : colliding
+                  ? "blue"
+                  : outside
+                    ? "yellow"
+                    : piece.color || "orange"
+            }
+            transparent={isImportedPiece || dimmed}
+            opacity={isImportedPiece ? 0 : parametricOpacity}
+            depthWrite={!isImportedPiece && !dimmed}
+            colorWrite={!isImportedPiece}
+            roughness={piece.pieceCategory === "SEPARATOR" ? 0.82 : 0.65}
+            metalness={0}
+          />
 
-    {/* FLETXA X TCP, VERMELLA */}
+          <Edges
+            threshold={15}
+            color={stateColor}
+            visible={!isImportedPiece}
+          />
+        </mesh>
+      </group>
 
-    <group
-      position={[
+      <mesh
+        position={[
+          referenceWorldPosition.x,
+          referenceWorldPosition.y,
+          referenceWorldPosition.z
+        ]}
+      >
+        <sphereGeometry args={[15, 16, 16]} />
+        <meshStandardMaterial color="lime" />
+      </mesh>
+
+      <group position={[
         referenceWorldPosition.x,
         referenceWorldPosition.y,
         referenceWorldPosition.z
-      ]}
-    >
+      ]}>
+        <primitive object={xArrow} />
+      </group>
 
-      <primitive
-        object={xArrow}
-      />
-
-    </group>
-
-
-    {/* FLETXA Y TCP, VERDA */}
-
-    <group
-      position={[
+      <group position={[
         referenceWorldPosition.x,
         referenceWorldPosition.y,
         referenceWorldPosition.z
-      ]}
-    >
+      ]}>
+        <primitive object={yArrow} />
+      </group>
 
-      <primitive
-        object={yArrow}
-      />
-
-    </group>
-
-
-    {/* FLETXA Z TCP, BLAVA */}
-
-    <group
-      position={[
+      <group position={[
         referenceWorldPosition.x,
         referenceWorldPosition.y,
         referenceWorldPosition.z
-      ]}
-    >
-
-      <primitive
-        object={zArrow}
-      />
-
-    </group>
-
-  </>
-);
-  
-
-
+      ]}>
+        <primitive object={zArrow} />
+      </group>
+    </>
+  );
 }

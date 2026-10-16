@@ -1,4 +1,9 @@
 import * as THREE from "three";
+import {
+  getImportedFaceCenterPallet,
+  getImportedFaceNormalPallet,
+  isImportedFaceReference
+} from "./importedFaceUtils.js";
 
 export function palletToThree(
   x,
@@ -155,9 +160,27 @@ function getFaceCenterPallet(
   piece,
   face
 ) {
+  if (
+    piece.pieceType ===
+      "IMPORTED_3D" &&
+    isImportedFaceReference(
+      face
+    )
+  ) {
+    const importedCenter =
+      getImportedFaceCenterPallet(
+        piece,
+        face
+      );
+
+    if (importedCenter) {
+      return importedCenter;
+    }
+  }
 
   const width =
     Number(piece.width);
+
 
   const height =
     Number(piece.height);
@@ -516,6 +539,27 @@ export function displayedToCenterCoordinates(
 export function getReferenceNormal(
   piece
 ) {
+  if (
+    piece.pieceType ===
+      "IMPORTED_3D" &&
+    isImportedFaceReference(
+      piece.referencePoint
+    )
+  ) {
+    const importedNormal =
+      getImportedFaceNormalPallet(
+        piece,
+        piece.referencePoint
+      );
+
+    if (importedNormal) {
+      return {
+        x: importedNormal.x,
+        y: importedNormal.y,
+        z: importedNormal.z
+      };
+    }
+  }
 
   const width =
     Number(piece.width);

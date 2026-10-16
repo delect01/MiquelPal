@@ -1,180 +1,73 @@
-//Pallet preview
+import { useEffect, useState } from "react";
+import { Canvas } from "@react-three/fiber";
+import { Bounds, Edges, OrbitControls } from "@react-three/drei";
+import { loadTransformedStoredModel } from "../utils/modelLoader.js";
 
-import {
-  Canvas
-} from "@react-three/fiber";
+function ImportedPreview({ modelData, color }) {
+  const [object, setObject] = useState(null);
+  useEffect(() => {
+    let cancelled = false;
+    if (!modelData?.modelId) return undefined;
+    loadTransformedStoredModel(modelData.modelId, modelData)
+      .then((result) => {
+        if (!cancelled) {
+          result.object.traverse((child) => {
+            if (!child.isMesh || !child.material) return;
+            const materials = Array.isArray(child.material)
+              ? child.material
+              : [child.material];
+            const colored = materials.map((material) => {
+              const clone = material.clone();
+              if (clone.color) clone.color.set(color || "#8b5a2b");
+              clone.needsUpdate = true;
+              return clone;
+            });
+            child.material = Array.isArray(child.material)
+              ? colored
+              : colored[0];
+          });
+          setObject(result.object);
+        }
+      })
+      .catch(console.error);
+    return () => { cancelled = true; };
+  }, [modelData?.modelId, modelData?.modelBottomFace, modelData?.rotationX, modelData?.rotationY, modelData?.rotationZ, color]);
+  return object ? <primitive object={object} /> : null;
+}
 
-import {
-  Bounds,
-  Center,
-  Edges,
-  OrbitControls
-} from "@react-three/drei";
-
-export default function PalletPreview({
-  sizeX,
-  sizeY,
-  sizeZ,
-  color
-}) {
-  const safeSizeX =
-    Number(sizeX) > 0
-      ? Number(sizeX)
-      : 1;
-
-  const safeSizeY =
-    Number(sizeY) > 0
-      ? Number(sizeY)
-      : 1;
-
-  const safeSizeZ =
-    Number(sizeZ) > 0
-      ? Number(sizeZ)
-      : 1;
-
-  const maximumSize =
-    Math.max(
-      safeSizeX,
-      safeSizeY,
-      safeSizeZ,
-      100
-    );
+export default function PalletPreview({ sizeX, sizeY, sizeZ, color, modelType, modelData }) {
+  const x = Number(sizeX) || 1;
+  const y = Number(sizeY) || 1;
+  const z = Number(sizeZ) || 1;
+  const imported = modelType === "IMPORTED_3D" && modelData?.modelId;
 
   return (
-    <div
-      style={{
-        width: "100%",
-        height: "320px",
-        position: "relative",
-        background: "#eef1f4",
-        border:
-          "1px solid #aeb6bf",
-        borderRadius: "8px",
-        overflow: "hidden"
-      }}
-    >
-      <Canvas
-        shadows
-        camera={{
-          position: [
-            600,
-            450,
-            600
-          ],
-          near: 0.1,
-          far: 100000,
-          fov: 45
-        }}
-      >
-        <color
-          attach="background"
-          args={["#eef1f4"]}
-        />
-
-        <ambientLight
-          intensity={1.1}
-        />
-
-        <directionalLight
-          castShadow
-          position={[
-            600,
-            900,
-            600
-          ]}
-          intensity={1.5}
-        />
-
-        <directionalLight
-          position={[
-            -500,
-            350,
-            -500
-          ]}
-          intensity={0.6}
-        />
-
-        <Bounds
-          fit
-          clip
-          observe
-          margin={1.4}
-        >
-          <Center>
-            <mesh
-              castShadow
-              receiveShadow
-            >
-              {/*
-                Three X correspon a Y pallet.
-                Three Y correspon a Z pallet.
-                Three Z correspon a X pallet.
-              */}
-              <boxGeometry
-                args={[
-                  safeSizeY,
-                  safeSizeZ,
-                  safeSizeX
-                ]}
-              />
-
-              <meshStandardMaterial
-                color={
-                  color ||
-                  "#8b5a2b"
-                }
-                roughness={0.8}
-                metalness={0}
-              />
-
-              <Edges
-                threshold={15}
-                color="black"
-              />
+    <div style={{ width: "100%", height: "320px", position: "relative", background: "#eef1f4", border: "1px solid #aeb6bf", borderRadius: "8px", overflow: "hidden" }}>
+      <Canvas shadows camera={{ position: [600, 450, 600], near: 0.1, far: 100000, fov: 45 }}>
+        <color attach="background" args={["#eef1f4"]} />
+        <ambientLight intensity={1.1} />
+        <directionalLight castShadow position={[600, 900, 600]} intensity={1.5} />
+        <Bounds fit clip observe margin={1.4}>
+          {imported ? <ImportedPreview modelData={modelData} color={color} /> : (
+            <mesh position={[y / 2, -z / 2, x / 2]} castShadow receiveShadow>
+              <boxGeometry args={[y, z, x]} />
+              <meshStandardMaterial color={color || "#8b5a2b"} roughness={0.8} metalness={0} />
+              <Edges threshold={15} color="black" />
             </mesh>
-          </Center>
+          )}
         </Bounds>
-
         <gridHelper
           args={[
-            maximumSize * 2.5,
+            Math.max(x, y, z, 100) * 2.5,
             20,
             "#8f99a5",
             "#c3c9d0"
           ]}
-          position={[
-            0,
-            -safeSizeZ / 2,
-            0
-          ]}
+          position={[0, -z, 0]}
         />
-
-        <OrbitControls
-          makeDefault
-          enableRotate
-          enableZoom
-          enablePan={false}
-          minDistance={10}
-          maxDistance={100000}
-        />
+        <axesHelper args={[Math.max(100, Math.min(x, y) * 0.15)]} />
+        <OrbitControls makeDefault enableRotate enableZoom enablePan={false} />
       </Canvas>
-
-      <div
-        style={{
-          position: "absolute",
-          left: "12px",
-          bottom: "10px",
-          padding: "5px 8px",
-          borderRadius: "4px",
-          background:
-            "rgba(255, 255, 255, 0.84)",
-          color: "#404850",
-          fontSize: "12px",
-          pointerEvents: "none"
-        }}
-      >
-        Arrossega per rotar · Roda per ampliar
-      </div>
     </div>
   );
 }

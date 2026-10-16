@@ -309,6 +309,15 @@ export function arePiecesPreciselyColliding(
         axis
       );
 
+if (
+  verticesA.length < 4 ||
+  verticesB.length < 4
+) {
+  return false;
+}
+
+
+
     if (
       projectionsAreSeparated(
         projectionA,

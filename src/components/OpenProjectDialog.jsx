@@ -1,34 +1,24 @@
-// open project dialog
-
-
 import {
   useEffect,
   useMemo,
   useState
 } from "react";
-
 import {
   deleteProject,
   loadProjectLibrary
 } from "../utils/projectStorage";
+import ProjectPalletizingPreview, {
+  getProjectPreviewData
+} from "./ProjectPalletizingPreview.jsx";
 
-
-
-function formatProjectDate(
-  dateValue
-) {
+function formatProjectDate(dateValue) {
   if (!dateValue) {
     return "Data desconeguda";
   }
 
-  const date =
-    new Date(dateValue);
+  const date = new Date(dateValue);
 
-  if (
-    Number.isNaN(
-      date.getTime()
-    )
-  ) {
+  if (Number.isNaN(date.getTime())) {
     return "Data desconeguda";
   }
 
@@ -49,199 +39,133 @@ export default function OpenProjectDialog({
   onClose,
   onOpenProject
 }) {
-  const [
-    projects,
-    setProjects
-  ] = useState([]);
+  const [projects, setProjects] =
+    useState([]);
+  const [selectedProjectId, setSelectedProjectId] =
+    useState("");
+  const [feedbackMessage, setFeedbackMessage] =
+    useState("");
+  const [isDeleteConfirmationOpen, setIsDeleteConfirmationOpen] =
+    useState(false);
 
-  const [
-    selectedProjectId,
-    setSelectedProjectId
-  ] = useState("");
+  useEffect(() => {
+    if (!open) return;
 
-  const [
-  feedbackMessage,
-  setFeedbackMessage
-] = useState("");
+    const loadedProjects =
+      loadProjectLibrary();
 
-const [
-  isDeleteConfirmationOpen,
-  setIsDeleteConfirmationOpen
-] = useState(false);
+    setProjects(loadedProjects);
+    setSelectedProjectId("");
+    setFeedbackMessage("");
+    setIsDeleteConfirmationOpen(false);
+  }, [open]);
 
-useEffect(() => {
-  if (!open) {
-    return;
-  }
+  const sortedProjects = useMemo(
+    () =>
+      [...projects].sort(
+        (projectA, projectB) => {
+          const dateA = new Date(
+            projectA.updatedAt ??
+            projectA.createdAt ??
+            0
+          ).getTime();
 
-  const loadedProjects =
-    loadProjectLibrary();
+          const dateB = new Date(
+            projectB.updatedAt ??
+            projectB.createdAt ??
+            0
+          ).getTime();
 
-  setProjects(
-    loadedProjects
+          return dateB - dateA;
+        }
+      ),
+    [projects]
   );
 
-  setSelectedProjectId("");
-  setFeedbackMessage("");
-
-  setIsDeleteConfirmationOpen(
-    false
+  const selectedProject = useMemo(
+    () =>
+      projects.find(
+        (project) =>
+          project.id === selectedProjectId
+      ) ?? null,
+    [projects, selectedProjectId]
   );
-}, [open]);
 
-  const sortedProjects =
-    useMemo(() => {
-      return [...projects]
-        .sort(
-          (
-            projectA,
-            projectB
-          ) => {
-            const dateA =
-              new Date(
-                projectA.updatedAt ??
-                projectA.createdAt ??
-                0
-              ).getTime();
+  const previewData = useMemo(
+    () =>
+      getProjectPreviewData(
+        selectedProject
+      ),
+    [selectedProject]
+  );
 
-            const dateB =
-              new Date(
-                projectB.updatedAt ??
-                projectB.createdAt ??
-                0
-              ).getTime();
+  if (!open) return null;
 
-            return dateB - dateA;
-          }
-        );
-    }, [projects]);
-
-  const selectedProject =
-    useMemo(() => {
-      return (
-        projects.find(
-          (project) =>
-            project.id ===
-            selectedProjectId
-        ) ??
-        null
+  function handleDeleteProject() {
+    if (!selectedProjectId) {
+      setFeedbackMessage(
+        "Selecciona un projecte abans d'eliminar-lo."
       );
-    }, [
-      projects,
-      selectedProjectId
-    ]);
+      return;
+    }
 
-  if (!open) {
-    return null;
+    setIsDeleteConfirmationOpen(true);
   }
 
+  function confirmDeleteProject() {
+    if (!selectedProjectId) {
+      setIsDeleteConfirmationOpen(false);
+      return;
+    }
 
-function handleDeleteProject() {
-  if (!selectedProjectId) {
+    const wasDeleted =
+      deleteProject(selectedProjectId);
+
+    if (!wasDeleted) {
+      setFeedbackMessage(
+        "No s'ha pogut eliminar el projecte."
+      );
+      setIsDeleteConfirmationOpen(false);
+      return;
+    }
+
+    setProjects(
+      projects.filter(
+        (project) =>
+          project.id !== selectedProjectId
+      )
+    );
+    setSelectedProjectId("");
     setFeedbackMessage(
-      "Selecciona un projecte abans d'eliminar-lo."
+      "El projecte s'ha eliminat."
     );
-
-    return;
+    setIsDeleteConfirmationOpen(false);
   }
-
-  setIsDeleteConfirmationOpen(
-    true
-  );
-}
-
-function confirmDeleteProject() {
-  if (!selectedProjectId) {
-    setIsDeleteConfirmationOpen(
-      false
-    );
-
-    return;
-  }
-
-  const wasDeleted =
-    deleteProject(
-      selectedProjectId
-    );
-
-  if (!wasDeleted) {
-    setFeedbackMessage(
-      "No s'ha pogut eliminar el projecte."
-    );
-
-    setIsDeleteConfirmationOpen(
-      false
-    );
-
-    return;
-  }
-
-  const updatedProjects =
-    projects.filter(
-      (project) =>
-        project.id !==
-        selectedProjectId
-    );
-
-  setProjects(
-    updatedProjects
-  );
-
-  setSelectedProjectId("");
-
-  setFeedbackMessage(
-    "El projecte s'ha eliminat."
-  );
-
-  setIsDeleteConfirmationOpen(
-    false
-  );
-}
-
-
-
-
-
 
   function handleOpenProject() {
-  if (!selectedProject) {
-    setFeedbackMessage(
-      "Selecciona un projecte abans d'obrir-lo."
-    );
+    if (!selectedProject) {
+      setFeedbackMessage(
+        "Selecciona un projecte abans d'obrir-lo."
+      );
+      return;
+    }
 
-    return;
+    onOpenProject({
+      ...selectedProject,
+      activePallet:
+        selectedProject.activePallet
+          ? {
+              ...selectedProject.activePallet
+            }
+          : null,
+      pieces:
+        Array.isArray(selectedProject.pieces)
+          ? selectedProject.pieces.map(
+              (piece) => ({ ...piece })
+            )
+          : []
+    });
   }
-
-  onOpenProject({
-    ...selectedProject,
-
-    activePallet:
-      selectedProject.activePallet
-        ? {
-            ...selectedProject.activePallet
-          }
-        : null,
-
-    pieces:
-      Array.isArray(
-        selectedProject.pieces
-      )
-        ? selectedProject.pieces.map(
-            (piece) => ({
-              ...piece
-            })
-          )
-        : []
-  });
-}
-
-  const pieceCount =
-    selectedProject &&
-    Array.isArray(
-      selectedProject.pieces
-    )
-      ? selectedProject.pieces.length
-      : 0;
 
   return (
     <div
@@ -256,61 +180,47 @@ function confirmDeleteProject() {
         alignItems: "center",
         justifyContent: "center",
         padding: "20px",
-        background:
-          "rgba(20, 25, 30, 0.72)"
+        background: "rgba(20, 25, 30, 0.72)"
       }}
       onMouseDown={(event) => {
-        if (
-          event.target ===
-          event.currentTarget
-        ) {
+        if (event.target === event.currentTarget) {
           onClose();
         }
       }}
     >
       <div
         style={{
-          width:
-            "min(720px, 94vw)",
-          maxHeight: "90vh",
+          width: "min(1000px, 95vw)",
+          maxHeight: "88vh",
           overflowY: "auto",
           boxSizing: "border-box",
           padding: "18px",
           borderRadius: "10px",
           background: "#ffffff",
-          boxShadow:
-            "0 18px 60px rgba(0, 0, 0, 0.35)"
+          boxShadow: "0 18px 60px rgba(0, 0, 0, 0.35)"
         }}
       >
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent:
-              "space-between",
-            gap: "12px",
-            marginBottom: "14px"
-          }}
-        >
+        <div style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          gap: "12px",
+          marginBottom: "14px"
+        }}>
           <div>
-            <h2
-              style={{
-                margin: 0,
-                color: "#303840",
-                fontSize: "21px"
-              }}
-            >
+            <h2 style={{
+              margin: 0,
+              color: "#303840",
+              fontSize: "21px"
+            }}>
               Obrir projecte
             </h2>
-
-            <div
-              style={{
-                marginTop: "4px",
-                color: "#59636e",
-                fontSize: "13px"
-              }}
-            >
-              Selecciona una composició guardada.
+            <div style={{
+              marginTop: "4px",
+              color: "#59636e",
+              fontSize: "13px"
+            }}>
+              
             </div>
           </div>
 
@@ -321,8 +231,7 @@ function confirmDeleteProject() {
             style={{
               width: "38px",
               height: "38px",
-              border:
-                "1px solid #b8c0c8",
+              border: "1px solid #b8c0c8",
               borderRadius: "50%",
               background: "#f4f6f8",
               color: "#303840",
@@ -334,70 +243,53 @@ function confirmDeleteProject() {
           </button>
         </div>
 
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns:
-              "minmax(240px, 1fr) minmax(250px, 1fr)",
-            gap: "14px"
-          }}
-        >
-          <section
-            style={{
-              padding: "12px",
-              border:
-                "1px solid #d7dce1",
-              borderRadius: "7px"
-            }}
-          >
-            <h3
-              style={{
-                margin:
-                  "0 0 8px 0",
-                color: "#4f5870",
-                fontSize: "15px"
-              }}
-            >
+        <div style={{
+          display: "grid",
+          gridTemplateColumns: "minmax(235px, 285px) minmax(0, 1fr)",
+          gap: "14px"
+        }}>
+          <section style={{
+            padding: "12px",
+            border: "1px solid #d7dce1",
+            borderRadius: "7px"
+          }}>
+            <h3 style={{
+              margin: "0 0 8px 0",
+              color: "#4f5870",
+              fontSize: "15px"
+            }}>
               Projectes guardats
             </h3>
 
-            {sortedProjects.length ===
-            0 ? (
-              <div
-                style={{
-                  padding: "14px",
-                  border:
-                    "1px dashed #b8c0c8",
-                  borderRadius: "6px",
-                  background: "#f7f8fa",
-                  color: "#66717c",
-                  fontSize: "13px",
-                  textAlign: "center"
-                }}
-              >
+            {sortedProjects.length === 0 ? (
+              <div style={{
+                padding: "14px",
+                border: "1px dashed #b8c0c8",
+                borderRadius: "6px",
+                background: "#f7f8fa",
+                color: "#66717c",
+                fontSize: "13px",
+                textAlign: "center"
+              }}>
                 Encara no hi ha cap projecte guardat.
               </div>
             ) : (
               <select
-                size={10}
-                value={
-                  selectedProjectId
-                }
+                size={8}
+                value={selectedProjectId}
                 onChange={(event) => {
                   setSelectedProjectId(
                     event.target.value
                   );
-
                   setFeedbackMessage("");
+                  setIsDeleteConfirmationOpen(false);
                 }}
                 style={{
                   width: "100%",
-                  height: "245px",
-                  boxSizing:
-                    "border-box",
+                  height: "235px",
+                  boxSizing: "border-box",
                   padding: "4px",
-                  border:
-                    "1px solid #aeb6bf",
+                  border: "1px solid #aeb6bf",
                   borderRadius: "5px",
                   background: "#ffffff",
                   color: "#303840",
@@ -419,287 +311,341 @@ function confirmDeleteProject() {
 
             <button
               type="button"
-              onClick={
-                handleDeleteProject
-              }
-              disabled={
-                !selectedProject
-              }
+              onClick={handleDeleteProject}
+              disabled={!selectedProject}
               style={{
                 width: "100%",
                 marginTop: "9px",
-                padding:
-                  "8px 10px",
-                border:
-                  "1px solid #b02a37",
+                padding: "8px 10px",
+                border: "1px solid #b02a37",
                 borderRadius: "5px",
-                background:
-                  selectedProject
-                    ? "#ffffff"
-                    : "#eceff2",
-                color:
-                  selectedProject
-                    ? "#b02a37"
-                    : "#7b848d",
-                cursor:
-                  selectedProject
-                    ? "pointer"
-                    : "not-allowed"
+                background: selectedProject
+                  ? "#ffffff"
+                  : "#eceff2",
+                color: selectedProject
+                  ? "#b02a37"
+                  : "#7b848d",
+                cursor: selectedProject
+                  ? "pointer"
+                  : "not-allowed"
               }}
             >
               Eliminar projecte
             </button>
 
-{isDeleteConfirmationOpen && (
-  <div
-    style={{
-      marginTop: "10px",
-      padding: "10px",
-      border:
-        "1px solid #d8a0a5",
-      borderRadius: "6px",
-      background: "#fff4f4"
-    }}
-  >
-    <div
-      style={{
-        marginBottom: "9px",
-        color: "#8f2029",
-        fontSize: "13px",
-        lineHeight: 1.4
-      }}
-    >
-      Vols eliminar definitivament el projecte{" "}
-      <strong>
-        {selectedProject?.name ??
-          ""}
-      </strong>
-      ?
-    </div>
-
-    <div
-      style={{
-        display: "flex",
-        gap: "7px"
-      }}
-    >
-      <button
-        type="button"
-        onClick={() => {
-          setIsDeleteConfirmationOpen(
-            false
-          );
-        }}
-        style={{
-          flex: 1,
-          padding: "7px 8px",
-          border:
-            "1px solid #9ea7b0",
-          borderRadius: "5px",
-          background: "#ffffff",
-          color: "#303840",
-          cursor: "pointer"
-        }}
-      >
-        Cancel·lar
-      </button>
-
-      <button
-        type="button"
-        onClick={
-          confirmDeleteProject
-        }
-        style={{
-          flex: 1,
-          padding: "7px 8px",
-          border: "none",
-          borderRadius: "5px",
-          background: "#b02a37",
-          color: "#ffffff",
-          fontWeight: 700,
-          cursor: "pointer"
-        }}
-      >
-        Confirmar
-      </button>
-    </div>
-  </div>
-)}
-
-
-          </section>
-
-          <section
-            style={{
-              padding: "12px",
-              border:
-                "1px solid #d7dce1",
-              borderRadius: "7px",
-              background: "#ffffff"
-            }}
-          >
-            <h3
-              style={{
-                margin:
-                  "0 0 8px 0",
-                color: "#4f5870",
-                fontSize: "15px"
-              }}
-            >
-              Informació
-            </h3>
-
-            {selectedProject ? (
-              <>
-                <div
-                  style={{
-                    marginBottom: "10px",
-                    padding: "10px",
-                    borderRadius: "6px",
-                    background: "#f4f6f8"
-                  }}
-                >
-                  <div
-                    style={{
-                      marginBottom: "4px",
-                      color: "#303840",
-                      fontSize: "14px",
-                      fontWeight: 700
-                    }}
-                  >
-                    {selectedProject.name}
-                  </div>
-
-                  <div
-                    style={{
-                      color: "#66717c",
-                      fontSize: "12px"
-                    }}
-                  >
-                    Modificat:{" "}
-                    {formatProjectDate(
-                      selectedProject.updatedAt
-                    )}
-                  </div>
+            {isDeleteConfirmationOpen && (
+              <div style={{
+                marginTop: "10px",
+                padding: "10px",
+                border: "1px solid #d8a0a5",
+                borderRadius: "6px",
+                background: "#fff4f4"
+              }}>
+                <div style={{
+                  marginBottom: "9px",
+                  color: "#8f2029",
+                  fontSize: "13px",
+                  lineHeight: 1.4
+                }}>
+                  Vols eliminar definitivament el projecte{" "}
+                  <strong>{selectedProject?.name ?? ""}</strong>?
                 </div>
 
+                <div style={{
+                  display: "flex",
+                  gap: "7px"
+                }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setIsDeleteConfirmationOpen(false);
+                    }}
+                    style={{
+                      flex: 1,
+                      padding: "7px 8px",
+                      border: "1px solid #9ea7b0",
+                      borderRadius: "5px",
+                      background: "#ffffff",
+                      color: "#303840",
+                      cursor: "pointer"
+                    }}
+                  >
+                    Cancel·lar
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={confirmDeleteProject}
+                    style={{
+                      flex: 1,
+                      padding: "7px 8px",
+                      border: "none",
+                      borderRadius: "5px",
+                      background: "#b02a37",
+                      color: "#ffffff",
+                      fontWeight: 700,
+                      cursor: "pointer"
+                    }}
+                  >
+                    Confirmar
+                  </button>
+                </div>
+              </div>
+            )}
+          </section>
+
+          <div
+            style={{
+              display: "contents"
+            }}
+          >
+            <section style={{
+              padding: "12px",
+              border: "1px solid #d7dce1",
+              borderRadius: "7px",
+              background: "#ffffff"
+            }}>
+              <h3 style={{
+                margin: "0 0 8px 0",
+                color: "#4f5870",
+                fontSize: "15px"
+              }}>
+                Previsualització del paletitzat
+              </h3>
+
+              <ProjectPalletizingPreview
+                project={selectedProject}
+              />
+            </section>
+
+            <section
+              style={{
+                gridColumn: "1 / -1",
+                padding: "10px 12px",
+                border: "1px solid #d7dce1",
+                borderRadius: "7px",
+                background: "#ffffff"
+              }}
+            >
+              {selectedProject ? (
                 <div
                   style={{
                     display: "grid",
                     gridTemplateColumns:
-                      "115px minmax(0, 1fr)",
-                    gap: "7px",
-                    color: "#404850",
-                    fontSize: "13px"
+                      "minmax(220px, 1fr) minmax(180px, 0.8fr) minmax(280px, 1.4fr)",
+                    gap: "14px",
+                    alignItems: "start"
                   }}
                 >
-                  <strong>
-                    Nombre de peces
-                  </strong>
+                  <div
+                    style={{
+                      gridColumn: "1",
+                      minWidth: 0
+                    }}
+                  >
+                    <div
+                      style={{
+                        marginBottom: "8px",
+                        padding: "6px 9px",
+                        borderRadius: "5px",
+                        background: "#eef4fb",
+                        color: "#315f91",
+                        fontSize: "12px",
+                        fontWeight: 800,
+                        textTransform: "uppercase"
+                      }}
+                    >
+                      Informació
+                    </div>
 
-                  <span>
-                    {pieceCount}
-                  </span>
+                    <div
+                      style={{
+                        color: "#303840",
+                        fontSize: "14px",
+                        fontWeight: 700
+                      }}
+                    >
+                      {selectedProject.name}
+                    </div>
 
-                  <strong>
-                    Palet
-                  </strong>
+                    <div
+                      style={{
+                        marginTop: "4px",
+                        color: "#66717c",
+                        fontSize: "12px"
+                      }}
+                    >
+                      Modificat:{" "}
+                      {formatProjectDate(
+                        selectedProject.updatedAt ??
+                        selectedProject.createdAt
+                      )}
+                    </div>
+                  </div>
 
-                  <span>
-                    {selectedProject
-                      .activePallet
-                      ?.name ??
-                      "Palet sense nom"}
-                  </span>
+                  <div
+                    style={{
+                      gridColumn: "2",
+                      minWidth: 0
+                    }}
+                  >
+                    <div
+                      style={{
+                        marginBottom: "8px",
+                        padding: "6px 9px",
+                        borderRadius: "5px",
+                        background: "#eef4fb",
+                        color: "#315f91",
+                        fontSize: "12px",
+                        fontWeight: 800,
+                        textTransform: "uppercase"
+                      }}
+                    >
+                      Paletitzat
+                    </div>
 
-                  <strong>
-                    Mida X
-                  </strong>
+                    <div
+                      style={{
+                        display: "grid",
+                        gridTemplateColumns:
+                          "minmax(0, 1fr) auto",
+                        gap: "5px 10px",
+                        color: "#404850",
+                        fontSize: "12px"
+                      }}
+                    >
+                      <strong>Peces totals</strong>
+                      <span>
+                        {previewData.regularPieces.length}
+                      </span>
 
-                  <span>
-                    {selectedProject
-                      .activePallet
-                      ?.sizeX ??
-                      "-"}
-                  </span>
+                      <strong>Instàncies de capa</strong>
+                      <span>
+                        {previewData.layers.length}
+                      </span>
+                    </div>
+                  </div>
 
-                  <strong>
-                    Mida Y
-                  </strong>
+                  <div
+                    style={{
+                      gridColumn: "3",
+                      minWidth: 0
+                    }}
+                  >
+                    <div
+                      style={{
+                        marginBottom: "8px",
+                        padding: "6px 9px",
+                        borderRadius: "5px",
+                        background: "#eef4fb",
+                        color: "#315f91",
+                        fontSize: "12px",
+                        fontWeight: 800,
+                        textTransform: "uppercase"
+                      }}
+                    >
+                      Models de peça
+                    </div>
 
-                  <span>
-                    {selectedProject
-                      .activePallet
-                      ?.sizeY ??
-                      "-"}
-                  </span>
+                    {previewData.modelNames.length > 0 ? (
+                      <ul
+                        style={{
+                          margin: 0,
+                          paddingLeft: "18px",
+                          color: "#404850",
+                          fontSize: "12px",
+                          lineHeight: 1.45
+                        }}
+                      >
+                        {previewData.modelNames.map(
+                          (name) => (
+                            <li
+                              key={name}
+                              style={{
+                                marginBottom: "2px",
+                                overflowWrap: "anywhere"
+                              }}
+                            >
+                              {name}
+                            </li>
+                          )
+                        )}
+                      </ul>
+                    ) : (
+                      <span
+                        style={{
+                          color: "#66717c",
+                          fontSize: "12px"
+                        }}
+                      >
+                        -
+                      </span>
+                    )}
+                  </div>
 
-                  <strong>
-                    Mida Z
-                  </strong>
-
-                  <span>
-                    {selectedProject
-                      .activePallet
-                      ?.sizeZ ??
-                      "-"}
-                  </span>
+                  {!previewData.hasPalletizing && (
+                    <div
+                      style={{
+                        gridColumn: "1 / -1",
+                        padding: "6px 8px",
+                        borderRadius: "5px",
+                        background: "#fff7e8",
+                        color: "#8a5a00",
+                        fontSize: "11px"
+                      }}
+                    >
+                      Aquest projecte no té una seqüència de paletitzat. Es mostra la composició actual.
+                    </div>
+                  )}
                 </div>
-              </>
-            ) : (
-              <div
-                style={{
-                  padding: "14px",
-                  border:
-                    "1px dashed #b8c0c8",
-                  borderRadius: "6px",
-                  background: "#f7f8fa",
-                  color: "#66717c",
-                  fontSize: "13px",
-                  textAlign: "center"
-                }}
-              >
-                Selecciona un projecte per veure'n la informació.
-              </div>
-            )}
+              ) : (
+                <div
+                  style={{
+                    padding: "10px",
+                    border: "1px dashed #b8c0c8",
+                    borderRadius: "6px",
+                    background: "#f7f8fa",
+                    color: "#66717c",
+                    fontSize: "12px",
+                    textAlign: "center"
+                  }}
+                >
+                  Selecciona un projecte per veure'n la informació.
+                </div>
+              )}
 
-            {feedbackMessage && (
-              <div
-                style={{
-                  marginTop: "12px",
-                  padding: "9px",
-                  borderRadius: "5px",
-                  background: "#eef4fb",
-                  color: "#244d7c",
-                  fontSize: "13px"
-                }}
-              >
-                {feedbackMessage}
-              </div>
-            )}
-          </section>
+              {feedbackMessage && (
+                <div
+                  style={{
+                    marginTop: "8px",
+                    padding: "7px",
+                    borderRadius: "5px",
+                    background: "#eef4fb",
+                    color: "#244d7c",
+                    fontSize: "12px"
+                  }}
+                >
+                  {feedbackMessage}
+                </div>
+              )}
+            </section>
+          </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent:
-              "flex-end",
-            gap: "8px",
-            marginTop: "14px",
-            paddingTop: "12px",
-            borderTop:
-              "1px solid #d7dce1"
-          }}
-        >
+        <div style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          gap: "8px",
+          marginTop: "14px",
+          paddingTop: "12px",
+          borderTop: "1px solid #d7dce1"
+        }}>
           <button
             type="button"
             onClick={onClose}
             style={{
-              padding:
-                "10px 18px",
-              border:
-                "1px solid #9ea7b0",
+              padding: "10px 18px",
+              border: "1px solid #9ea7b0",
               borderRadius: "6px",
               background: "#ffffff",
               color: "#303840",
@@ -711,33 +657,26 @@ function confirmDeleteProject() {
 
           <button
             type="button"
-            onClick={
-              handleOpenProject
-            }
-            disabled={
-              !selectedProject
-            }
+            onClick={handleOpenProject}
+            disabled={!selectedProject}
             style={{
-              padding:
-                "10px 22px",
+              padding: "10px 22px",
               border: "none",
               borderRadius: "6px",
-              background:
-                selectedProject
-                  ? "#168447"
-                  : "#aeb6bf",
+              background: selectedProject
+                ? "#168447"
+                : "#aeb6bf",
               color: "#ffffff",
               fontWeight: 700,
-              cursor:
-                selectedProject
-                  ? "pointer"
-                  : "not-allowed"
+              cursor: selectedProject
+                ? "pointer"
+                : "not-allowed"
             }}
           >
             Obrir projecte
           </button>
-                </div>
+        </div>
       </div>
     </div>
-);
+  );
 }

@@ -1,119 +1,79 @@
 import {
   useEffect,
-  useMemo
+  useMemo,
+  useState
 } from "react";
-
 import {
   Canvas
 } from "@react-three/fiber";
-
 import {
   Bounds,
   Center,
   Edges,
   OrbitControls
 } from "@react-three/drei";
-
 import * as THREE from "three";
-
 import {
   getPieceLocalVertices
 } from "../utils/pieceGeometry";
+import {
+  loadStoredModel
+} from "../utils/modelLoader.js";
 
 const TRAPEZOID_INDICES = [
-  // Base inferior
   0, 1, 2,
   0, 2, 3,
-
-  // Part superior
   4, 6, 5,
   4, 7, 6,
-
-  // Cara lateral 1
   0, 4, 5,
   0, 5, 1,
-
-  // Cara lateral 2
   1, 5, 6,
   1, 6, 2,
-
-  // Cara lateral 3
   2, 6, 7,
   2, 7, 3,
-
-  // Cara lateral 4
   3, 7, 4,
   3, 4, 0
 ];
 
-function TrapezoidGeometry({
-  width,
-  height,
-  depth,
-  topWidth,
-  topDepth
-}) {
+function TrapezoidGeometry(props) {
   const geometry = useMemo(() => {
-    const previewPiece = {
-      pieceType: "TRAPEZOIDAL",
+    const vertices =
+      getPieceLocalVertices({
+        pieceType:
+          "TRAPEZOIDAL",
+        ...props
+      }).flatMap((vertex) => [
+        vertex.x,
+        vertex.y,
+        vertex.z
+      ]);
 
-      width,
-      height,
-      depth,
-
-      topWidth,
-      topDepth
-    };
-
-    const localVertices =
-      getPieceLocalVertices(
-        previewPiece
-      );
-
-    const positions =
-      localVertices.flatMap(
-        (vertex) => [
-          vertex.x,
-          vertex.y,
-          vertex.z
-        ]
-      );
-
-    const newGeometry =
+    const nextGeometry =
       new THREE.BufferGeometry();
 
-    newGeometry.setAttribute(
+    nextGeometry.setAttribute(
       "position",
       new THREE.Float32BufferAttribute(
-        positions,
+        vertices,
         3
       )
     );
 
-    newGeometry.setIndex(
+    nextGeometry.setIndex(
       TRAPEZOID_INDICES
     );
 
-    newGeometry.computeVertexNormals();
-    newGeometry.computeBoundingBox();
-    newGeometry.computeBoundingSphere();
+    nextGeometry.computeVertexNormals();
 
-    return newGeometry;
+    return nextGeometry;
   }, [
-    width,
-    height,
-    depth,
-    topWidth,
-    topDepth
+    props.width,
+    props.height,
+    props.depth,
+    props.topWidth,
+    props.topDepth
   ]);
 
-  /*
-    Quan les dimensions canvien es crea
-    una geometria nova.
-
-    Aquesta neteja elimina la geometria
-    anterior de la memòria de Three.js.
-  */
   useEffect(() => {
     return () => {
       geometry.dispose();
@@ -128,50 +88,60 @@ function TrapezoidGeometry({
   );
 }
 
-function PreviewPiece({
-  pieceType,
-  width,
-  height,
-  depth,
-  topWidth,
-  topDepth
+function StoredPreviewModel({
+  modelId,
+  bottomFace,
+  onDimensions
 }) {
-  return (
-    <mesh
-      castShadow
-      receiveShadow
-    >
-      {pieceType ===
-      "TRAPEZOIDAL" ? (
-        <TrapezoidGeometry
-          width={width}
-          height={height}
-          depth={depth}
-          topWidth={topWidth}
-          topDepth={topDepth}
-        />
-      ) : (
-        <boxGeometry
-          args={[
-            width,
-            height,
-            depth
-          ]}
-        />
-      )}
+  const [object, setObject] =
+    useState(null);
 
-      <meshStandardMaterial
-        color="#f28c28"
-        roughness={0.55}
-        metalness={0}
-      />
+  useEffect(() => {
+    let active = true;
 
-      <Edges
-        threshold={15}
-        color="#202020"
-      />
-    </mesh>
-  );
+    setObject(null);
+
+    loadStoredModel(
+      modelId,
+      bottomFace
+    )
+      .then(({
+        object: loadedObject,
+        dimensions,
+        collisionGeometry
+      }) => {
+        if (!active) {
+          return;
+        }
+
+        setObject(
+          loadedObject
+        );
+
+        onDimensions?.({
+          ...dimensions,
+          collisionGeometry
+        });
+      })
+      .catch((error) => {
+        console.error(
+          "No s'ha pogut preparar la previsualitzacio 3D:",
+          error
+        );
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [
+    modelId,
+    bottomFace,
+    onDimensions
+  ]);
+
+  return object
+    ? <primitive object={object} />
+    : null;
 }
 
 export default function PiecePreview({
@@ -180,56 +150,58 @@ export default function PiecePreview({
   height,
   depth,
   topWidth,
-  topDepth
+  topDepth,
+  modelId,
+  modelBottomFace,
+  onImportedDimensions
 }) {
-  /*
-    Protecció contra valors buits,
-    negatius o no numèrics mentre
-    l'usuari escriu als inputs.
-  */
-  const safeWidth =
-    Number.isFinite(Number(width)) &&
-    Number(width) > 0
-      ? Number(width)
-      : 1;
-
-  const safeHeight =
-    Number.isFinite(Number(height)) &&
-    Number(height) > 0
-      ? Number(height)
-      : 1;
-
-  const safeDepth =
-    Number.isFinite(Number(depth)) &&
-    Number(depth) > 0
-      ? Number(depth)
-      : 1;
-
-  const safeTopWidth =
+  const safe = (
+    value,
+    fallback = 1
+  ) =>
     Number.isFinite(
-      Number(topWidth)
+      Number(value)
     ) &&
-    Number(topWidth) > 0
-      ? Number(topWidth)
-      : safeWidth;
+    Number(value) > 0
+      ? Number(value)
+      : fallback;
 
-  const safeTopDepth =
-    Number.isFinite(
-      Number(topDepth)
-    ) &&
-    Number(topDepth) > 0
-      ? Number(topDepth)
-      : safeDepth;
+  const safeWidth = safe(width);
+  const safeHeight = safe(height);
+  const safeDepth = safe(depth);
+
+  const safeTopWidth = safe(
+    topWidth,
+    safeWidth
+  );
+
+  const safeTopDepth = safe(
+    topDepth,
+    safeDepth
+  );
+
+  const imported =
+    pieceType ===
+      "IMPORTED_3D" &&
+    Boolean(modelId);
 
   const gridSize =
     Math.max(
       safeWidth,
       safeHeight,
       safeDepth,
-      safeTopWidth,
-      safeTopDepth,
       100
     ) * 3;
+
+  /*
+    Tant les peces parametriques com les
+    importades tenen el pivot al centre.
+
+    Per tant el terra de la previsualitzacio
+    ha d'estar sempre a -height / 2.
+  */
+  const floorY =
+    -safeHeight / 2;
 
   return (
     <div
@@ -285,36 +257,64 @@ export default function PiecePreview({
           intensity={0.6}
         />
 
-        {/*
-          Bounds enquadra automàticament
-          la peça quan canvien les seves
-          dimensions.
-        */}
         <Bounds
           fit
           clip
           observe
           margin={1.4}
         >
-          {/*
-            Center garanteix que la peça
-            quedi centrada dins de la
-            previsualització.
-          */}
-          <Center>
-            <PreviewPiece
-              pieceType={pieceType}
-              width={safeWidth}
-              height={safeHeight}
-              depth={safeDepth}
-              topWidth={
-                safeTopWidth
+          {imported ? (
+            <StoredPreviewModel
+              modelId={modelId}
+              bottomFace={
+                modelBottomFace
               }
-              topDepth={
-                safeTopDepth
+              onDimensions={
+                onImportedDimensions
               }
             />
-          </Center>
+          ) : (
+            <Center>
+              <mesh
+                castShadow
+                receiveShadow
+              >
+                {pieceType ===
+                "TRAPEZOIDAL" ? (
+                  <TrapezoidGeometry
+                    width={safeWidth}
+                    height={safeHeight}
+                    depth={safeDepth}
+                    topWidth={
+                      safeTopWidth
+                    }
+                    topDepth={
+                      safeTopDepth
+                    }
+                  />
+                ) : (
+                  <boxGeometry
+                    args={[
+                      safeWidth,
+                      safeHeight,
+                      safeDepth
+                    ]}
+                  />
+                )}
+
+                <meshStandardMaterial
+                  color="#f28c28"
+                  roughness={0.55}
+                  metalness={0}
+                />
+
+                <Edges
+                  threshold={15}
+                  color="#202020"
+                />
+              </mesh>
+            </Center>
+          )}
         </Bounds>
 
         <gridHelper
@@ -326,7 +326,7 @@ export default function PiecePreview({
           ]}
           position={[
             0,
-            -safeHeight / 2,
+            floorY,
             0
           ]}
         />
@@ -349,13 +349,13 @@ export default function PiecePreview({
           padding: "5px 8px",
           borderRadius: "4px",
           background:
-            "rgba(255, 255, 255, 0.82)",
+            "rgba(255,255,255,0.82)",
           color: "#404850",
           fontSize: "12px",
           pointerEvents: "none"
         }}
       >
-        Arrossega per rotar · Roda per ampliar
+    
       </div>
     </div>
   );

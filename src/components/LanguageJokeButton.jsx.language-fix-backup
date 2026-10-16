@@ -1,0 +1,327 @@
+import {
+  useEffect,
+  useRef,
+  useState
+} from "react";
+import {
+  SUPPORTED_LANGUAGES
+} from "../i18n/traductor.js";
+
+const SINGLE_CLICK_DELAY_MS = 240;
+const LANGUAGE_STORAGE_KEY =
+  "pallet-simulator-language";
+const LANGUAGE_CHANGE_EVENT =
+  "pallet-simulator-language-change";
+
+function getStoredLanguage() {
+  try {
+    const stored =
+      window.localStorage.getItem(
+        LANGUAGE_STORAGE_KEY
+      );
+
+    return SUPPORTED_LANGUAGES.some(
+      (language) =>
+        language.code === stored
+    )
+      ? stored
+      : "ca";
+  } catch {
+    return "ca";
+  }
+}
+
+export default function LanguageJokeButton({
+  visible,
+  onToggle,
+  t
+}) {
+  const [menuOpen, setMenuOpen] =
+    useState(false);
+
+  const [activeLanguage, setActiveLanguage] =
+    useState(getStoredLanguage);
+
+  const containerRef = useRef(null);
+  const clickTimerRef = useRef(null);
+
+  useEffect(() => {
+    function handleLanguageChanged(event) {
+      if (event.detail?.language) {
+        setActiveLanguage(
+          event.detail.language
+        );
+      }
+    }
+
+    function handleOutsideClick(event) {
+      if (
+        containerRef.current &&
+        !containerRef.current.contains(
+          event.target
+        )
+      ) {
+        setMenuOpen(false);
+      }
+    }
+
+    function handleKeyDown(event) {
+      if (event.key === "Escape") {
+        setMenuOpen(false);
+      }
+    }
+
+    window.addEventListener(
+      LANGUAGE_CHANGE_EVENT,
+      handleLanguageChanged
+    );
+    document.addEventListener(
+      "pointerdown",
+      handleOutsideClick
+    );
+    document.addEventListener(
+      "keydown",
+      handleKeyDown
+    );
+
+    return () => {
+      window.removeEventListener(
+        LANGUAGE_CHANGE_EVENT,
+        handleLanguageChanged
+      );
+      document.removeEventListener(
+        "pointerdown",
+        handleOutsideClick
+      );
+      document.removeEventListener(
+        "keydown",
+        handleKeyDown
+      );
+
+      if (clickTimerRef.current) {
+        window.clearTimeout(
+          clickTimerRef.current
+        );
+      }
+    };
+  }, []);
+
+  function hideMessageIfVisible() {
+    if (visible) {
+      onToggle();
+    }
+  }
+
+  function handleSingleClick() {
+    if (clickTimerRef.current) {
+      window.clearTimeout(
+        clickTimerRef.current
+      );
+    }
+
+    clickTimerRef.current =
+      window.setTimeout(() => {
+        hideMessageIfVisible();
+
+        setMenuOpen(
+          (currentValue) =>
+            !currentValue
+        );
+
+        clickTimerRef.current = null;
+      }, SINGLE_CLICK_DELAY_MS);
+  }
+
+  function handleDoubleClick(event) {
+    event.preventDefault();
+
+    if (clickTimerRef.current) {
+      window.clearTimeout(
+        clickTimerRef.current
+      );
+      clickTimerRef.current = null;
+    }
+
+    setMenuOpen(false);
+
+    /*
+      El doble clic conserva el comportament
+      original: mostra el missatge si estava
+      ocult i l'oculta si ja era visible.
+    */
+    onToggle();
+  }
+
+  function selectLanguage(languageCode) {
+    setActiveLanguage(languageCode);
+    setMenuOpen(false);
+    hideMessageIfVisible();
+
+    try {
+      window.localStorage.setItem(
+        LANGUAGE_STORAGE_KEY,
+        languageCode
+      );
+    } catch {
+      // La seleccio continua funcionant
+      // encara que localStorage falli.
+    }
+
+    window.dispatchEvent(
+      new CustomEvent(
+        LANGUAGE_CHANGE_EVENT,
+        {
+          detail: {
+            language:
+              languageCode
+          }
+        }
+      )
+    );
+  }
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        position: "fixed",
+        right: "18px",
+        top: "18px",
+        zIndex: 1000,
+        display: "flex",
+        flexDirection: "column",
+        alignItems: "flex-end",
+        gap: "8px"
+      }}
+    >
+      {visible && (
+        <div
+          style={{
+            maxWidth: "410px",
+            padding: "8px 11px",
+            border:
+              "1px solid #b9d2f5",
+            borderRadius: "6px",
+            background: "#ffffff",
+            color: "#2767c5",
+            fontSize: "13px",
+            fontWeight: 700,
+            boxShadow:
+              "0 4px 14px rgba(0, 0, 0, 0.14)",
+            overflowWrap: "anywhere"
+          }}
+        >
+          {t.language.internalJokeLink}
+        </div>
+      )}
+
+      {menuOpen && (
+        <div
+          role="menu"
+          aria-label={t.language.change}
+          style={{
+            minWidth: "190px",
+            padding: "6px",
+            border:
+              "1px solid #c6d0da",
+            borderRadius: "8px",
+            background: "#ffffff",
+            boxShadow:
+              "0 8px 24px rgba(0, 0, 0, 0.18)"
+          }}
+        >
+          {SUPPORTED_LANGUAGES.map(
+            (language) => {
+              const selected =
+                language.code ===
+                activeLanguage;
+
+              return (
+                <button
+                  key={language.code}
+                  type="button"
+                  role="menuitemradio"
+                  aria-checked={selected}
+                  dir={language.direction}
+                  onClick={() => {
+                    selectLanguage(
+                      language.code
+                    );
+                  }}
+                  style={{
+                    width: "100%",
+                    display: "flex",
+                    alignItems: "center",
+                    justifyContent:
+                      "space-between",
+                    gap: "12px",
+                    padding: "9px 10px",
+                    border: "none",
+                    borderRadius: "6px",
+                    background: selected
+                      ? "#eef4fb"
+                      : "transparent",
+                    color: selected
+                      ? "#2767c5"
+                      : "#303840",
+                    fontSize: "13px",
+                    fontWeight: selected
+                      ? 800
+                      : 600,
+                    textAlign: "start",
+                    cursor: "pointer"
+                  }}
+                >
+                  <span>{language.label}</span>
+                  <span
+                    aria-hidden="true"
+                    style={{
+                      width: "16px",
+                      visibility: selected
+                        ? "visible"
+                        : "hidden"
+                    }}
+                  >
+                    ✓
+                  </span>
+                </button>
+              );
+            }
+          )}
+        </div>
+      )}
+
+      <button
+        type="button"
+        aria-label={t.language.change}
+        title={t.language.change}
+        onClick={handleSingleClick}
+        onDoubleClick={handleDoubleClick}
+        style={{
+          width: "46px",
+          height: "46px",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 0,
+          border:
+            "1px solid #2767c5",
+          borderRadius: "8px",
+          background: menuOpen
+            ? "#2767c5"
+            : "#ffffff",
+          color: menuOpen
+            ? "#ffffff"
+            : "#2767c5",
+          fontSize: "24px",
+          lineHeight: 1,
+          cursor: "pointer",
+          boxShadow:
+            "0 5px 16px rgba(0, 0, 0, 0.18)"
+        }}
+      >
+        🌐
+      </button>
+    </div>
+  );
+}
