@@ -1,125 +1,205 @@
+//pieceGeometry
+
 import * as THREE from "three";
-import { getPieceCenter, palletEulerToThreeQuaternion } from "./pieceUtils";
 
+import {
+  getPieceCenter,
+  palletEulerToThreeQuaternion
+} from "./pieceUtils";
+
+/*
+  Retorna els 8 vèrtexs locals de la peça.
+
+  Índexs:
+
+  0, 1, 2, 3 = base inferior
+  4, 5, 6, 7 = part superior
+*/
 export function getPieceLocalVertices(piece) {
-  if (piece.pieceType === "IMPORTED_3D") {
-    const importedVertices = piece.collisionGeometry?.exact?.vertices ?? piece.collisionGeometry?.vertices;
+  const bottomWidth =
+    piece.width;
 
-    if (!Array.isArray(importedVertices) || importedVertices.length < 4) {
-      console.error(
-        "Peça 3D importada sense geometria de col·lisió:",
-        {
-          id: piece.id,
-          name: piece.name,
-          modelId: piece.modelId,
-          pieceType: piece.pieceType,
-          collisionGeometry: piece.collisionGeometry
-        }
-      );
-      return [];
-    }
+  const bottomDepth =
+    piece.depth;
 
-    return importedVertices.map(
-      (vertex) =>
-        new THREE.Vector3(
-          Number(vertex.x),
-          Number(vertex.y),
-          Number(vertex.z)
-        )
-    );
-  }
+  const height =
+    piece.height;
 
-  const bottomWidth = Number(piece.width);
-  const bottomDepth = Number(piece.depth);
-  const height = Number(piece.height);
-  const topWidth = piece.pieceType === "TRAPEZOIDAL"
-    ? Number(piece.topWidth ?? piece.width)
-    : bottomWidth;
-  const topDepth = piece.pieceType === "TRAPEZOIDAL"
-    ? Number(piece.topDepth ?? piece.depth)
-    : bottomDepth;
+  /*
+    En una peça rectangular:
 
-  const bw = bottomWidth / 2;
-  const bd = bottomDepth / 2;
-  const tw = topWidth / 2;
-  const td = topDepth / 2;
-  const hh = height / 2;
+    topWidth = width
+    topDepth = depth
+
+    En una peça trapezoidal utilitzem
+    topWidth i topDepth.
+  */
+  const topWidth =
+    piece.pieceType === "TRAPEZOIDAL"
+      ? piece.topWidth ?? piece.width
+      : piece.width;
+
+  const topDepth =
+    piece.pieceType === "TRAPEZOIDAL"
+      ? piece.topDepth ?? piece.depth
+      : piece.depth;
+
+  const bottomHalfWidth =
+    bottomWidth / 2;
+
+  const bottomHalfDepth =
+    bottomDepth / 2;
+
+  const topHalfWidth =
+    topWidth / 2;
+
+  const topHalfDepth =
+    topDepth / 2;
+
+  const halfHeight =
+    height / 2;
 
   return [
-    new THREE.Vector3(-bw, -hh, -bd),
-    new THREE.Vector3(bw, -hh, -bd),
-    new THREE.Vector3(bw, -hh, bd),
-    new THREE.Vector3(-bw, -hh, bd),
-    new THREE.Vector3(-tw, hh, -td),
-    new THREE.Vector3(tw, hh, -td),
-    new THREE.Vector3(tw, hh, td),
-    new THREE.Vector3(-tw, hh, td)
+    /*
+      Base inferior
+    */
+
+    new THREE.Vector3(
+      -bottomHalfWidth,
+      -halfHeight,
+      -bottomHalfDepth
+    ),
+
+    new THREE.Vector3(
+      bottomHalfWidth,
+      -halfHeight,
+      -bottomHalfDepth
+    ),
+
+    new THREE.Vector3(
+      bottomHalfWidth,
+      -halfHeight,
+      bottomHalfDepth
+    ),
+
+    new THREE.Vector3(
+      -bottomHalfWidth,
+      -halfHeight,
+      bottomHalfDepth
+    ),
+
+    /*
+      Part superior
+    */
+
+    new THREE.Vector3(
+      -topHalfWidth,
+      halfHeight,
+      -topHalfDepth
+    ),
+
+    new THREE.Vector3(
+      topHalfWidth,
+      halfHeight,
+      -topHalfDepth
+    ),
+
+    new THREE.Vector3(
+      topHalfWidth,
+      halfHeight,
+      topHalfDepth
+    ),
+
+    new THREE.Vector3(
+      -topHalfWidth,
+      halfHeight,
+      topHalfDepth
+    )
   ];
 }
 
-export function getPieceWorldVertices(piece) {
-  const center = getPieceCenter(piece);
-  const quaternion = palletEulerToThreeQuaternion(
-    piece.rxDeg ?? 0,
-    piece.ryDeg ?? 0,
-    piece.rzDeg ?? 0
-  );
-  const centerVector = new THREE.Vector3(center.x, center.y, center.z);
-  const localVertices = getPieceLocalVertices(piece);
+/*
+  Transforma els vèrtexs locals en vèrtexs
+  absoluts de Three.js.
 
-  if (localVertices.length === 0) {
-    return [];
-  }
+  Utilitza el mateix centre i el mateix
+  quaternion que la peça visual.
+*/
+export function getPieceWorldVertices(piece) {
+  const center =
+    getPieceCenter(piece);
+
+  const quaternion =
+    palletEulerToThreeQuaternion(
+      piece.rxDeg ?? 0,
+      piece.ryDeg ?? 0,
+      piece.rzDeg ?? 0
+    );
+
+  const centerVector =
+    new THREE.Vector3(
+      center.x,
+      center.y,
+      center.z
+    );
+
+  const localVertices =
+    getPieceLocalVertices(piece);
 
   return localVertices.map(
-    (vertex) =>
-      vertex
+    (localVertex) =>
+      localVertex
         .clone()
         .applyQuaternion(quaternion)
         .add(centerVector)
   );
 }
 
-export function getPieceFaces(piece) {
-  if (
-    piece.pieceType === "IMPORTED_3D" &&
-    piece.collisionGeometry?.triangles
-  ) {
-    return piece.collisionGeometry.triangles;
-  }
+/*
+  Definició de les sis cares del volum.
 
-  return [
-    [0, 3, 2, 1],
-    [4, 5, 6, 7],
-    [0, 1, 5, 4],
-    [1, 2, 6, 5],
-    [2, 3, 7, 6],
-    [3, 0, 4, 7]
-  ];
-}
-
-export function getPieceEdges(piece) {
-  if (
-    piece.pieceType === "IMPORTED_3D" &&
-    piece.collisionGeometry?.edges
-  ) {
-    return piece.collisionGeometry.edges;
-  }
-
-  return [
-    [0, 1], [1, 2], [2, 3], [3, 0],
-    [4, 5], [5, 6], [6, 7], [7, 4],
-    [0, 4], [1, 5], [2, 6], [3, 7]
-  ];
-}
-
+  Cada cara conté els quatre índexs
+  dels seus vèrtexs.
+*/
 export const PIECE_FACES = [
-  [0, 3, 2, 1], [4, 5, 6, 7], [0, 1, 5, 4],
-  [1, 2, 6, 5], [2, 3, 7, 6], [3, 0, 4, 7]
+  [0, 3, 2, 1],
+  [4, 5, 6, 7],
+  [0, 1, 5, 4],
+  [1, 2, 6, 5],
+  [2, 3, 7, 6],
+  [3, 0, 4, 7]
 ];
 
+/*
+  Definició de les dotze arestes del volum.
+*/
 export const PIECE_EDGES = [
-  [0, 1], [1, 2], [2, 3], [3, 0],
-  [4, 5], [5, 6], [6, 7], [7, 4],
-  [0, 4], [1, 5], [2, 6], [3, 7]
+  /*
+    Base inferior
+  */
+
+  [0, 1],
+  [1, 2],
+  [2, 3],
+  [3, 0],
+
+  /*
+    Part superior
+  */
+
+  [4, 5],
+  [5, 6],
+  [6, 7],
+  [7, 4],
+
+  /*
+    Arestes que uneixen base i part superior
+  */
+
+  [0, 4],
+  [1, 5],
+  [2, 6],
+  [3, 7]
 ];
+
+
