@@ -3,8 +3,9 @@ import { PIECE_CONFIG } from "../Config/geometryConfig";
 import PiecePreview from "./PiecePreview";
 import Import3DButton from "./Import3DButton.jsx";
 import { MODEL_BOTTOM_FACES } from "../utils/modelLoader.js";
-
-const STORAGE_KEY = "pallet-simulator-piece-library";
+import NumericInput from "./NumericInput.jsx";
+import { loadPieceLibrary, savePieceLibrary } from "../utils/pieceLibrary.js";
+import { getPieceGeometryVersion } from "../utils/conveyorConfigurations.js";
 
 function getInitialForm() {
   return {
@@ -23,47 +24,89 @@ function getInitialForm() {
   };
 }
 
-function loadSavedPieces() {
-  try {
-    const value = localStorage.getItem(STORAGE_KEY);
-    const parsed = value ? JSON.parse(value) : [];
-    return Array.isArray(parsed) ? parsed : [];
-  } catch {
-    return [];
-  }
+// Formulari a partir d'una peça existent (mode edició)
+function getFormFromPiece(piece) {
+  return {
+    ...getInitialForm(),
+    name: piece.name ?? "",
+    pieceType: piece.pieceType,
+    width: piece.width,
+    height: piece.height,
+    depth: piece.depth,
+    topWidth: piece.topWidth ?? piece.width,
+    topDepth: piece.topDepth ?? piece.depth,
+    modelId: piece.modelId ?? null,
+    modelName: piece.modelName ?? null,
+    modelFormat: piece.modelFormat ?? null,
+    modelUnit: piece.modelUnit ?? null,
+    modelBottomFace: piece.modelBottomFace ?? "NEGATIVE_Y"
+  };
 }
 
-function saveLibrary(items) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
-}
-
-function Field({ label, value, onChange, type = "text" }) {
+function Field({ label, value, onChange, type = "text", disabled = false }) {
   return (
     <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontWeight: 600 }}>
       {label}
-      <input
-        type={type}
-        min={type === "number" ? 1 : undefined}
-        value={value}
-        onChange={(event) => onChange(event.target.value)}
-        style={{ height: "34px", padding: "0 8px", border: "1px solid #aeb6bf", borderRadius: "5px" }}
-      />
+      {type === "number" ? (
+        <NumericInput
+          value={value}
+          onChange={onChange}
+          disabled={disabled}
+          style={{ height: "34px", padding: "0 8px", border: "1px solid #aeb6bf", borderRadius: "5px" }}
+        />
+      ) : (
+        <input
+          type={type}
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+          style={{ height: "34px", padding: "0 8px", border: "1px solid #aeb6bf", borderRadius: "5px" }}
+        />
+      )}
     </label>
   );
 }
 
-export default function NewPieceDialog({ open, onClose, onCreatePiece, t }) {
+/*
+  Nova peça / Editar peça.
+
+  En mode edició (editingPiece) només es pot canviar el
+  nom: la geometria d'una peça ja col·locada no es toca.
+
+  requestPieceDeletion(id, nom, eliminar): demana
+  confirmació si la peça té configuració de cinta i, si
+  s'accepta, elimina la peça i la seva configuració.
+*/
+export default function NewPieceDialog({
+  open,
+  onClose,
+  onCreatePiece,
+  editingPiece = null,
+  onUpdatePiece,
+  editingLibraryPiece = null,
+  requestPieceDeletion = (id, name, deletePiece) => deletePiece(),
+  t
+}) {
   const [form, setForm] = useState(getInitialForm);
-  const [savedPieces, setSavedPieces] = useState(loadSavedPieces);
+  const [savedPieces, setSavedPieces] = useState(loadPieceLibrary);
   const [selectedSavedPieceId, setSelectedSavedPieceId] = useState("");
   const [feedback, setFeedback] = useState("");
+  // Edició d'una peça que no és a la biblioteca: desar-la-hi (per defecte, sí)
+  const [saveToLibrary, setSaveToLibrary] = useState(true);
+
+  const isEditing = Boolean(editingPiece);
+  const editingPieceId = editingPiece?.id ?? null;
 
   useEffect(() => {
     if (!open) return;
-    setForm(getInitialForm());
+    setForm(editingPiece ? getFormFromPiece(editingPiece) : getInitialForm());
+    setSavedPieces(loadPieceLibrary());
     setSelectedSavedPieceId("");
     setFeedback("");
-  }, [open]);
+    setSaveToLibrary(true);
+    // Només en obrir o en canviar de peça
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, editingPieceId]);
 
   const imported = form.pieceType === "IMPORTED_3D" && form.modelId;
 
@@ -120,8 +163,13 @@ export default function NewPieceDialog({ open, onClose, onCreatePiece, t }) {
       ? savedPieces.map((item) => item.id === existing.id ? saved : item)
       : [...savedPieces, saved];
 
+    // La llista només canvia si s'ha pogut desar
+    if (!savePieceLibrary(next)) {
+      setFeedback(t.pieceDialog.saveError);
+      return;
+    }
+
     setSavedPieces(next);
-    saveLibrary(next);
     setSelectedSavedPieceId(saved.id);
     setFeedback(existing ? t.pieceDialog.templateUpdated : t.pieceDialog.templateSaved);
   }
@@ -134,17 +182,54 @@ export default function NewPieceDialog({ open, onClose, onCreatePiece, t }) {
 
   function deleteTemplate() {
     if (!selectedSavedPieceId) return;
-    const next = savedPieces.filter((item) => item.id !== selectedSavedPieceId);
-    setSavedPieces(next);
-    saveLibrary(next);
-    setSelectedSavedPieceId("");
-    setForm(getInitialForm());
-    setFeedback(t.pieceDialog.templateDeleted);
+
+    const pieceId = selectedSavedPieceId;
+    const pieceName =
+      savedPieces.find((item) => item.id === pieceId)?.name ?? "";
+
+    // Si té configuració de cinta, s'avisa i s'eliminen totes dues
+    requestPieceDeletion(pieceId, pieceName, () => {
+      const next = loadPieceLibrary().filter((item) => item.id !== pieceId);
+
+      if (!savePieceLibrary(next)) {
+        setFeedback(t.pieceDialog.saveError);
+        return;
+      }
+
+      setSavedPieces(next);
+      setSelectedSavedPieceId("");
+      setForm(getInitialForm());
+      setFeedback(t.pieceDialog.templateDeleted);
+    });
   }
 
   function createPiece() {
     const data = validatedData();
-    if (data) onCreatePiece(data);
+    if (!data) return;
+
+    if (isEditing) {
+      const result = onUpdatePiece(
+        editingPiece.id,
+        { name: data.name || editingPiece.name },
+        { saveToLibrary: !editingLibraryPiece && saveToLibrary }
+      );
+
+      // P. ex. el nom ja el té una altra peça de la biblioteca
+      if (result?.error) {
+        setFeedback(result.error);
+      }
+      return;
+    }
+
+    // Vincle amb la plantilla si la geometria no s'ha tocat
+    const template = savedPieces.find((item) => item.id === selectedSavedPieceId);
+    const libraryPieceId =
+      template &&
+      getPieceGeometryVersion(template) === getPieceGeometryVersion(data)
+        ? template.id
+        : null;
+
+    onCreatePiece({ ...data, libraryPieceId });
   }
 
   if (!open) return null;
@@ -159,10 +244,10 @@ export default function NewPieceDialog({ open, onClose, onCreatePiece, t }) {
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "12px" }}>
           <div>
             <h2 style={{ margin: 0 }}>
-              {t.pieceDialog.title}
+              {isEditing ? t.pieceDialog.editTitle : t.pieceDialog.title}
             </h2>
             <div style={{ marginTop: "5px", color: "#59636e" }}>
-              {t.pieceDialog.subtitle}
+              {isEditing ? t.pieceDialog.editSubtitle : t.pieceDialog.subtitle}
             </div>
           </div>
           <button type="button" onClick={onClose} style={{ width: "38px", height: "38px", borderRadius: "50%" }}>×</button>
@@ -170,6 +255,7 @@ export default function NewPieceDialog({ open, onClose, onCreatePiece, t }) {
 
         <div style={{ display: "grid", gridTemplateColumns: "minmax(280px,360px) minmax(360px,1fr)", gap: "16px" }}>
           <div>
+            {!isEditing && (
             <section style={{ padding: "12px", border: "1px solid #d7dce1", borderRadius: "7px", marginBottom: "10px" }}>
               <h3 style={{ marginTop: 0 }}>
               {t.pieceDialog.library}
@@ -196,12 +282,28 @@ export default function NewPieceDialog({ open, onClose, onCreatePiece, t }) {
                 />
               </div>
             </section>
+            )}
 
             <section style={{ padding: "12px", border: "1px solid #d7dce1", borderRadius: "7px" }}>
               <h3 style={{ marginTop: 0 }}>
               {t.pieceDialog.characteristics}
             </h3>
               <Field label={t.pieceDialog.pieceName} value={form.name} onChange={(value) => update("name", value)} />
+
+              {/* Editar una peça que no és a la biblioteca: es pregunta si s'hi vol desar */}
+              {isEditing && !editingLibraryPiece && (
+                <div style={{ marginTop: "12px", padding: "9px 10px", border: "1px solid #f0c36d", borderRadius: "6px", background: "#fff8e6", color: "#6b4a00", fontSize: "13px", textAlign: "left" }}>
+                  <div style={{ fontWeight: 700 }}>{t.pieceDialog.notInLibrary}</div>
+                  <label style={{ display: "flex", alignItems: "center", gap: "7px", marginTop: "6px", cursor: "pointer" }}>
+                    <input
+                      type="checkbox"
+                      checked={saveToLibrary}
+                      onChange={(event) => setSaveToLibrary(event.target.checked)}
+                    />
+                    {t.pieceDialog.saveToLibrary}
+                  </label>
+                </div>
+              )}
 
               {imported ? (
                 <>
@@ -210,6 +312,7 @@ export default function NewPieceDialog({ open, onClose, onCreatePiece, t }) {
             <select
                       value={form.modelBottomFace}
                       onChange={(event) => update("modelBottomFace", event.target.value)}
+                      disabled={isEditing}
                       style={{ height: "36px", border: "1px solid #aeb6bf", borderRadius: "5px" }}
                     >
                       {MODEL_BOTTOM_FACES.map((face) => (
@@ -228,28 +331,30 @@ export default function NewPieceDialog({ open, onClose, onCreatePiece, t }) {
                 <>
                   <label style={{ display: "flex", flexDirection: "column", gap: "5px", fontWeight: 600, marginTop: "12px" }}>
               {t.pieceDialog.pieceType}
-            <select value={form.pieceType} onChange={(event) => update("pieceType", event.target.value)} style={{ height: "36px" }}>
+            <select value={form.pieceType} onChange={(event) => update("pieceType", event.target.value)} disabled={isEditing} style={{ height: "36px" }}>
                       <option value="RECTANGULAR">{t.pieceDialog.rectangular}</option>
                       <option value="TRAPEZOIDAL">{t.pieceDialog.trapezoidal}</option>
                     </select>
                   </label>
                   <div style={{ display: "grid", gridTemplateColumns: "repeat(3,minmax(0,1fr))", gap: "7px", marginTop: "12px" }}>
-                    <Field type="number" label={t.pieceDialog.width} value={form.width} onChange={(value) => update("width", value)} />
-                    <Field type="number" label={t.pieceDialog.height} value={form.height} onChange={(value) => update("height", value)} />
-                    <Field type="number" label={t.pieceDialog.depth} value={form.depth} onChange={(value) => update("depth", value)} />
+                    <Field type="number" label={t.pieceDialog.width} value={form.width} onChange={(value) => update("width", value)} disabled={isEditing} />
+                    <Field type="number" label={t.pieceDialog.height} value={form.height} onChange={(value) => update("height", value)} disabled={isEditing} />
+                    <Field type="number" label={t.pieceDialog.depth} value={form.depth} onChange={(value) => update("depth", value)} disabled={isEditing} />
                     {form.pieceType === "TRAPEZOIDAL" && (
                       <>
-                        <Field type="number" label={t.pieceDialog.topWidth} value={form.topWidth} onChange={(value) => update("topWidth", value)} />
-                        <Field type="number" label={t.pieceDialog.topDepth} value={form.topDepth} onChange={(value) => update("topDepth", value)} />
+                        <Field type="number" label={t.pieceDialog.topWidth} value={form.topWidth} onChange={(value) => update("topWidth", value)} disabled={isEditing} />
+                        <Field type="number" label={t.pieceDialog.topDepth} value={form.topDepth} onChange={(value) => update("topDepth", value)} disabled={isEditing} />
                       </>
                     )}
                   </div>
                 </>
               )}
 
+              {!isEditing && (
               <button type="button" onClick={saveTemplate} style={{ width: "100%", marginTop: "16px", padding: "10px", background: "#2767c5", color: "white", border: 0, borderRadius: "6px" }}>
               {t.pieceDialog.saveCharacteristics}
             </button>
+              )}
               {feedback && <div style={{ marginTop: "12px", padding: "9px", background: "#eef4fb", color: "#244d7c" }}>{feedback}</div>}
             </section>
           </div>
@@ -263,7 +368,7 @@ export default function NewPieceDialog({ open, onClose, onCreatePiece, t }) {
               onImportedDimensions={handleImportedDimensions}
             />
             <div style={{ marginTop: "10px", color: "#59636e", fontSize: "14px" }}>
-              
+
             </div>
           </div>
         </div>
@@ -273,7 +378,7 @@ export default function NewPieceDialog({ open, onClose, onCreatePiece, t }) {
               {t.common.cancel}
             </button>
           <button type="button" onClick={createPiece} style={{ padding: "10px 22px", background: "#168447", color: "white", border: 0, borderRadius: "6px", fontWeight: 700 }}>
-              {t.pieceDialog.createPiece}
+              {isEditing ? t.pieceDialog.saveChanges : t.pieceDialog.createPiece}
             </button>
         </div>
       </div>

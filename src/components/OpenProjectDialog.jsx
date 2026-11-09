@@ -6,7 +6,7 @@ import {
 import {
   deleteProject,
   loadProjectLibrary
-} from "../utils/projectStorage";
+} from "../utils/projectStorage.js";
 import ProjectPalletizingPreview, {
   getProjectPreviewData
 } from "./ProjectPalletizingPreview.jsx";
@@ -296,6 +296,12 @@ export default function OpenProjectDialog({
                   fontSize: "13px"
                 }}
               >
+                {/*
+                  Opció buida i oculta: sense ella, React marca la
+                  primera opció quan no n'hi ha cap de seleccionada
+                  i clicar-la no dispara cap canvi.
+                */}
+                <option value="" hidden />
                 {sortedProjects.map(
                   (project) => (
                     <option

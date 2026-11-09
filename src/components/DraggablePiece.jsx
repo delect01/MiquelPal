@@ -6,8 +6,9 @@ import {
   getReferenceAxes,
   palletEulerToThreeQuaternion,
   getReferenceWorldPositionThree
-} from "../utils/pieceUtils";
-import { getPieceLocalVertices } from "../utils/pieceGeometry";
+} from "../utils/pieceUtils.js";
+import { getPieceLocalVertices } from "../utils/pieceGeometry.js";
+import { getPieceCollisionGeometry } from "../utils/collisionGeometryStore.js";
 import ImportedPieceModel from "./ImportedPieceModel.jsx";
 import ImportedCollisionOutline from "./ImportedCollisionOutline.jsx";
 
@@ -53,6 +54,9 @@ export default function DraggablePiece({
   const isImportedPiece =
     piece.pieceType === "IMPORTED_3D" && Boolean(piece.modelId);
 
+  // Volum compartit del model (null mentre es calcula)
+  const collisionGeometry = getPieceCollisionGeometry(piece);
+
   const importedVisualState = selected
     ? "selected"
     : colliding
@@ -81,7 +85,7 @@ export default function DraggablePiece({
     piece.depth,
     piece.topWidth,
     piece.topDepth,
-    piece.collisionGeometry
+    collisionGeometry
   ];
 
   const xArrow = useMemo(
@@ -163,8 +167,19 @@ export default function DraggablePiece({
   }, [onReplicationCancel, onDragEnd]);
 
   function handlePointerDown(event) {
-    event.stopPropagation();
     const sourceEvent = getSourceEvent(event);
+
+    /*
+      Només el botó esquerre selecciona i arrossega
+      peces. El dret (girar) i la roda (desplaçar) són
+      per a la càmera, encara que es premin sobre una
+      peça.
+    */
+    if (sourceEvent.button !== undefined && sourceEvent.button !== 0) {
+      return;
+    }
+
+    event.stopPropagation();
     sourceEvent.piecePointerHandled = true;
 
     dragPlane.set(new THREE.Vector3(0, 1, 0), -pieceCenter.y);
@@ -177,9 +192,12 @@ export default function DraggablePiece({
       sourceEvent.shiftKey ||
       (sourceEvent.ctrlKey && piece.pieceCategory === "SEPARATOR");
 
-    if (canReplicate) onSelect(piece.id, false);
-    else if (additiveSelection) onSelect(piece.id, true);
-    else if (!selected) onSelect(piece.id, false);
+    // Alt: només aquesta peça, encara que sigui d'una agafada múltiple
+    const selectionOptions = { single: Boolean(sourceEvent.altKey) };
+
+    if (canReplicate) onSelect(piece.id, false, selectionOptions);
+    else if (additiveSelection) onSelect(piece.id, true, selectionOptions);
+    else if (!selected) onSelect(piece.id, false, selectionOptions);
 
     dragOffset.set(
       pieceCenter.x - intersection.x,
@@ -197,7 +215,7 @@ export default function DraggablePiece({
     isReplicating.current = false;
     wantsReplication.current = canReplicate;
 
-    onDragStart(piece.id, pieceCenter.x, pieceCenter.z);
+    onDragStart(piece.id, pieceCenter.x, pieceCenter.z, selectionOptions);
     capturedTarget.current = event.currentTarget;
     capturedPointerId.current = event.pointerId;
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -307,12 +325,13 @@ export default function DraggablePiece({
               bottomFace={piece.modelBottomFace ?? "NEGATIVE_Y"}
               visualState={importedVisualState}
               dimmed={dimmed}
+              color={piece.color || "orange"}
             />
 
+            {/* Contorn sempre visible, com a les peces creades */}
             <ImportedCollisionOutline
-              collisionGeometry={piece.collisionGeometry}
+              collisionGeometry={collisionGeometry}
               color={stateColor}
-              visible={selected || colliding || outside}
             />
           </>
         )}
@@ -332,7 +351,13 @@ export default function DraggablePiece({
             <boxGeometry args={[piece.width, piece.height, piece.depth]} />
           )}
 
+          {/*
+            La key fa un material nou en atenuar-se: three
+            no recompila el shader quan només canvia
+            transparent, i la peça quedaria opaca.
+          */}
           <meshStandardMaterial
+            key={dimmed ? "dimmed" : "solid"}
             color={
               selected
                 ? "red"

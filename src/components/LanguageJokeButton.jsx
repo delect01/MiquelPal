@@ -6,10 +6,19 @@ import {
 
 const SINGLE_CLICK_DELAY_MS = 230;
 
+const DICTIONARY_URL =
+  "https://www.amazon.es/diccionario-catalan-castellano/s?k=diccionario+catalan+castellano";
+
+/*
+  Botó d'idioma:
+  - un clic: obre o tanca el desplegable d'idiomes i
+    amaga el link (si es veia);
+  - doble clic: mostra o amaga el link.
+*/
 export default function LanguageJokeButton({
   visible,
   onToggle,
-  t,
+  onHide,
   activeLanguage,
   availableLanguages = [],
   onChangeLanguage
@@ -60,6 +69,11 @@ export default function LanguageJokeButton({
       return;
     }
 
+    /*
+      Només quan ja és segur que no és un doble clic: si
+      s'amagués el link de seguida, el doble clic el
+      tornaria a mostrar.
+    */
     clickTimerRef.current =
       window.setTimeout(() => {
         clickTimerRef.current = null;
@@ -67,6 +81,7 @@ export default function LanguageJokeButton({
           (currentValue) =>
             !currentValue
         );
+        onHide?.();
       }, SINGLE_CLICK_DELAY_MS);
   }
 
@@ -83,11 +98,6 @@ export default function LanguageJokeButton({
     setMenuOpen(false);
     onToggle?.();
   }
-
-  const message =
-    t?.language?.message ??
-    t?.languageMessage ??
-    "https://www.amazon.es/diccionario-catalan-castellano/s?k=diccionario+catalan+castellano";
 
   return (
     <div
@@ -207,7 +217,18 @@ export default function LanguageJokeButton({
               "0 10px 26px rgba(0,0,0,0.2)"
           }}
         >
-          {message}
+          <a
+            href={DICTIONARY_URL}
+            target="_blank"
+            rel="noopener noreferrer"
+            style={{
+              color: "#1a5fd0",
+              textDecoration: "underline",
+              wordBreak: "break-all"
+            }}
+          >
+            {DICTIONARY_URL}
+          </a>
         </div>
       )}
     </div>

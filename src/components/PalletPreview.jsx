@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Bounds, Edges, OrbitControls } from "@react-three/drei";
 import { loadTransformedStoredModel } from "../utils/modelLoader.js";
+import PalletWorldAxes from "./PalletWorldAxes.jsx";
 
 function ImportedPreview({ modelData, color }) {
   const [object, setObject] = useState(null);
@@ -48,8 +49,13 @@ export default function PalletPreview({ sizeX, sizeY, sizeZ, color, modelType, m
         <ambientLight intensity={1.1} />
         <directionalLight castShadow position={[600, 900, 600]} intensity={1.5} />
         <Bounds fit clip observe margin={1.4}>
+          {/*
+            Mateixa posició que a l'escena del simulador: el
+            palet creix des de l'origen cap a +X i +Y del
+            robot (en Three.js, cap a -Z i -X).
+          */}
           {imported ? <ImportedPreview modelData={modelData} color={color} /> : (
-            <mesh position={[y / 2, -z / 2, x / 2]} castShadow receiveShadow>
+            <mesh position={[-y / 2, -z / 2, -x / 2]} castShadow receiveShadow>
               <boxGeometry args={[y, z, x]} />
               <meshStandardMaterial color={color || "#8b5a2b"} roughness={0.8} metalness={0} />
               <Edges threshold={15} color="black" />
@@ -65,7 +71,8 @@ export default function PalletPreview({ sizeX, sizeY, sizeZ, color, modelType, m
           ]}
           position={[0, -z, 0]}
         />
-        <axesHelper args={[Math.max(100, Math.min(x, y) * 0.15)]} />
+        {/* Eixos del robot, com al simulador: X endavant, Y esquerra, Z amunt */}
+        <PalletWorldAxes length={Math.max(150, Math.min(x, y) * 0.25)} />
         <OrbitControls makeDefault enableRotate enableZoom enablePan={false} />
       </Canvas>
     </div>

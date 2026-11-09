@@ -21,6 +21,10 @@ const CONFIGURATORS = [
     textKey: "separators"
   },
   {
+    name: "conveyor",
+    textKey: "conveyor"
+  },
+  {
     name: "layers",
     textKey: "layers"
   },

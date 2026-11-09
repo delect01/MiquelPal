@@ -19,16 +19,21 @@ function translated(
 export default function ProjectMenu({
   projectName,
   hasUnsavedChanges,
+  autosaveFailed = false,
   onNewProject,
   onOpenProject,
   onSaveProject,
   onSaveProjectAs,
+  onExportProject,
+  onImportFile,
+  onExportBackup,
   t
 }) {
   const [isMenuOpen, setIsMenuOpen] =
     useState(false);
   const menuContainerRef =
     useRef(null);
+  const importInputRef = useRef(null);
 
   useEffect(() => {
     function handlePointerDown(event) {
@@ -90,6 +95,18 @@ export default function ProjectMenu({
     saveAs: translated(
       t?.projectMenu?.saveAs,
       "Guardar com a..."
+    ),
+    exportProject: translated(
+      t?.projectMenu?.exportProject,
+      "Exportar projecte..."
+    ),
+    importFile: translated(
+      t?.projectMenu?.importFile,
+      "Importar fitxer..."
+    ),
+    exportBackup: translated(
+      t?.projectMenu?.exportBackup,
+      "Còpia de seguretat..."
     )
   };
 
@@ -182,6 +199,25 @@ export default function ProjectMenu({
         </div>
       </div>
 
+      {/* La còpia de recuperació no s'ha pogut desar: cal guardar el projecte */}
+      {autosaveFailed && hasUnsavedChanges && (
+        <div
+          role="alert"
+          style={{
+            marginTop: "8px",
+            padding: "7px 9px",
+            borderRadius: "5px",
+            background: "#fff0f1",
+            color: "#b02a37",
+            fontSize: "12px",
+            fontWeight: 600,
+            lineHeight: 1.35
+          }}
+        >
+          {t.project.autosaveFailed}
+        </div>
+      )}
+
       {isMenuOpen && (
         <div
           style={{
@@ -253,8 +289,69 @@ export default function ProjectMenu({
           >
             {labels.saveAs}
           </button>
+
+          <div
+            style={{
+              height: "1px",
+              margin: "5px 4px",
+              background: "#d7dce1"
+            }}
+          />
+
+          <button
+            type="button"
+            onClick={() => {
+              executeMenuAction(
+                onExportProject
+              );
+            }}
+            style={menuItemStyle}
+          >
+            {labels.exportProject}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              executeMenuAction(() =>
+                importInputRef.current?.click()
+              );
+            }}
+            style={menuItemStyle}
+          >
+            {labels.importFile}
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              executeMenuAction(
+                onExportBackup
+              );
+            }}
+            style={menuItemStyle}
+          >
+            {labels.exportBackup}
+          </button>
         </div>
       )}
+
+      {/* Projecte (.miquelpal.json) o còpia de seguretat */}
+      <input
+        ref={importInputRef}
+        type="file"
+        accept=".json,application/json"
+        data-import-file
+        style={{ display: "none" }}
+        onChange={(event) => {
+          const file = event.target.files?.[0];
+          event.target.value = "";
+
+          if (file) {
+            onImportFile(file);
+          }
+        }}
+      />
     </div>
   );
 }

@@ -7,11 +7,14 @@ import { Edges } from "@react-three/drei";
 import {
   getPieceCenter,
   palletEulerToThreeQuaternion
-} from "../utils/pieceUtils";
+} from "../utils/pieceUtils.js";
 import {
   getPieceLocalVertices
-} from "../utils/pieceGeometry";
+} from "../utils/pieceGeometry.js";
 import ImportedPieceModel from "./ImportedPieceModel.jsx";
+import ImportedCollisionOutline from "./ImportedCollisionOutline.jsx";
+import { getPieceCollisionGeometry } from "../utils/collisionGeometryStore.js";
+import useCollisionGeometryVersion from "../hooks/useCollisionGeometryVersion.js";
 
 function createTrapezoidGeometry(piece) {
   const vertices =
@@ -51,6 +54,9 @@ function createTrapezoidGeometry(piece) {
 export default function ProjectPreviewPiece({
   piece
 }) {
+  // Redibuixa el contorn quan el volum del model acaba de carregar
+  useCollisionGeometryVersion();
+
   const center =
     getPieceCenter(piece);
 
@@ -117,15 +123,24 @@ export default function ProjectPreviewPiece({
       ]}
     >
       {isImported ? (
-        <ImportedPieceModel
-          modelId={piece.modelId}
-          bottomFace={
-            piece.modelBottomFace ??
-            "NEGATIVE_Y"
-          }
-          visualState="normal"
-          dimmed={false}
-        />
+        <>
+          <ImportedPieceModel
+            modelId={piece.modelId}
+            bottomFace={
+              piece.modelBottomFace ??
+              "NEGATIVE_Y"
+            }
+            visualState="normal"
+            dimmed={false}
+            color={color}
+          />
+
+          {/* Mateix contorn que les peces creades */}
+          <ImportedCollisionOutline
+            collisionGeometry={getPieceCollisionGeometry(piece)}
+            color="#3f4750"
+          />
+        </>
       ) : (
         <mesh
           castShadow

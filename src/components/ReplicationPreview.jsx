@@ -4,8 +4,8 @@ import { Edges } from "@react-three/drei";
 import {
   getPieceCenter,
   palletEulerToThreeQuaternion
-} from "../utils/pieceUtils";
-import { getPieceLocalVertices } from "../utils/pieceGeometry";
+} from "../utils/pieceUtils.js";
+import { getPieceLocalVertices } from "../utils/pieceGeometry.js";
 
 function createTrapezoidGeometry(piece) {
   const localVertices = getPieceLocalVertices(piece);

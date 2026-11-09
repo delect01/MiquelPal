@@ -11,7 +11,16 @@ import {
   getPieceWorldVertices,
   PIECE_FACES,
   PIECE_EDGES
-} from "./pieceGeometry";
+} from "./pieceGeometry.js";
+
+import {
+  hasImportedConvexGeometry,
+  getImportedConvexSatData
+} from "./importedConvexGeometry.js";
+
+import {
+  areConvexVerticesWithinDistance
+} from "./convexProximity.js";
 
 /*
   Evita normalitzar vectors pràcticament
@@ -273,10 +282,166 @@ function projectionsAreSeparated(
   );
 }
 
+/*
+  Dades SAT d'una peça: la forma real si és una
+  peça 3D importada, o la capsa / trapezi
+  paramètric en cas contrari.
+*/
+function getSatShape(piece) {
+  if (
+    hasImportedConvexGeometry(piece)
+  ) {
+    return getImportedConvexSatData(
+      piece
+    );
+  }
+
+  const vertices =
+    getPieceWorldVertices(piece);
+
+  return {
+    vertices,
+    faceNormals:
+      getFaceNormals(vertices),
+    edgeDirections:
+      getEdgeDirections(vertices)
+  };
+}
+
+/*
+  Descart ràpid: si les caixes WORLD estan
+  separades més que la tolerància, no cal fer
+  el SAT complet.
+*/
+function boundsAreSeparated(
+  verticesA,
+  verticesB
+) {
+  const tolerance =
+    COLLISION_CONFIG.tolerance;
+
+  const boxA =
+    new THREE.Box3()
+      .setFromPoints(verticesA)
+      .expandByScalar(tolerance);
+
+  const boxB =
+    new THREE.Box3()
+      .setFromPoints(verticesB);
+
+  return !boxA.intersectsBox(boxB);
+}
+
+/*
+  SAT general entre dos políedres convexos:
+  normals de cara de totes dues formes i
+  productes vectorials entre les seves
+  arestes.
+*/
+function areConvexShapesColliding(
+  shapeA,
+  shapeB
+) {
+  if (
+    shapeA.vertices.length < 4 ||
+    shapeB.vertices.length < 4
+  ) {
+    return false;
+  }
+
+  if (
+    boundsAreSeparated(
+      shapeA.vertices,
+      shapeB.vertices
+    )
+  ) {
+    return false;
+  }
+
+  /*
+    Camí ràpid: distància real (GJK).
+    Col·lisió si les formes es toquen o queden
+    a menys de la tolerància.
+  */
+  const withinTolerance =
+    areConvexVerticesWithinDistance(
+      shapeA.vertices,
+      shapeB.vertices,
+      COLLISION_CONFIG.tolerance
+    );
+
+  if (withinTolerance !== null) {
+    return withinTolerance;
+  }
+
+  /*
+    Reserva: SAT complet si GJK no convergeix.
+  */
+  const axes = [];
+
+  [
+    ...shapeA.faceNormals,
+    ...shapeB.faceNormals
+  ].forEach((normal) => {
+    addUniqueAxis(axes, normal);
+  });
+
+  shapeA.edgeDirections.forEach(
+    (edgeA) => {
+      shapeB.edgeDirections.forEach(
+        (edgeB) => {
+          addUniqueAxis(
+            axes,
+            new THREE.Vector3()
+              .crossVectors(
+                edgeA,
+                edgeB
+              )
+          );
+        }
+      );
+    }
+  );
+
+  for (const axis of axes) {
+    if (
+      projectionsAreSeparated(
+        projectVerticesOntoAxis(
+          shapeA.vertices,
+          axis
+        ),
+        projectVerticesOntoAxis(
+          shapeB.vertices,
+          axis
+        )
+      )
+    ) {
+      return false;
+    }
+  }
+
+  return true;
+}
+
 export function arePiecesPreciselyColliding(
   pieceA,
   pieceB
 ) {
+  /*
+    Si hi ha alguna peça importada, utilitzem
+    la seva forma real en lloc de la capsa
+    width x height x depth.
+  */
+  if (
+    hasImportedConvexGeometry(pieceA) ||
+    hasImportedConvexGeometry(pieceB)
+  ) {
+    return areConvexShapesColliding(
+      getSatShape(pieceA),
+      getSatShape(pieceB)
+    );
+  }
+
   const verticesA =
     getPieceWorldVertices(pieceA);
 

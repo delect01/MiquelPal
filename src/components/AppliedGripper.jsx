@@ -1,50 +1,69 @@
 import { useEffect, useMemo, useState } from "react";
 import * as THREE from "three";
 import { Edges } from "@react-three/drei";
-import { getReferenceAxes, getReferenceWorldPositionThree } from "../utils/pieceUtils";
+import { getPieceGripperPose, getPoseQuaternion } from "../utils/graspGeometry.js";
 import { loadStoredModel } from "../utils/modelLoader.js";
+import { buildGripperTargetMatrix } from "../utils/gripperTransform.js";
 
-function ImportedAppliedModel({ gripper, matrix }) {
+// Pinça "fantasma" (definir agafades): deixa veure i clicar les peces
+const GHOST_OPACITY = 0.3;
+
+function makeGhost(object) {
+  object.traverse((child) => {
+    if (!child.isMesh) return;
+    const materials = Array.isArray(child.material) ? child.material : [child.material];
+    materials.forEach((material) => {
+      if (!material) return;
+      material.transparent = true;
+      material.opacity = Math.min(Number(material.opacity ?? 1), GHOST_OPACITY);
+      material.depthWrite = false;
+    });
+  });
+}
+
+function ImportedAppliedModel({ gripper, matrix, ghost = false }) {
   const [object, setObject] = useState(null);
   useEffect(() => {
     let active = true;
     loadStoredModel(gripper.modelId, gripper.modelBottomFace || "NEGATIVE_Y")
       .then((result) => {
+        if (ghost) makeGhost(result.object);
         if (active) setObject(result.object);
       })
       .catch((error) => console.error("No s'ha pogut carregar la gripper aplicada:", error));
     return () => { active = false; };
-  }, [gripper.modelId, gripper.modelBottomFace]);
+  }, [gripper.modelId, gripper.modelBottomFace, ghost]);
 
   if (!object) return null;
   return <primitive object={object} matrix={matrix} matrixAutoUpdate={false} raycast={() => null} />;
 }
 
-export default function AppliedGripper({ gripper, piece, offsetPreview = null }) {
-  const axes = getReferenceAxes(piece, true, true);
-  const tcpPosition = getReferenceWorldPositionThree(piece);
-
+/*
+  Pinça sobre una peça (el seu TCP) o, si es passa pose,
+  sobre una agafada múltiple (TCP del grup amb la
+  direcció de l'eina de la peça guia).
+*/
+export default function AppliedGripper({ gripper, piece, pose = null, offsetPreview = null }) {
   const targetMatrix = useMemo(() => {
-    const position = tcpPosition.clone();
+    const basePose = pose ?? getPieceGripperPose(piece);
+    const position = basePose.position.clone();
     if (offsetPreview) {
-      position.addScaledVector(axes.tangentX, Number(offsetPreview.x) || 0);
-      position.addScaledVector(axes.tangentY, Number(offsetPreview.y) || 0);
-      position.addScaledVector(axes.toolZ, Number(offsetPreview.z) || 0);
+      position.addScaledVector(basePose.tangentX, Number(offsetPreview.x) || 0);
+      position.addScaledVector(basePose.tangentY, Number(offsetPreview.y) || 0);
+      position.addScaledVector(basePose.toolZ, Number(offsetPreview.z) || 0);
     }
 
-    const basis = new THREE.Matrix4().makeBasis(
-      axes.tangentX.clone().normalize(),
-      axes.tangentY.clone().normalize(),
-      axes.toolZ.clone().normalize()
-    );
-    const targetQuaternion = new THREE.Quaternion().setFromRotationMatrix(basis).normalize();
-    const robotFront = new THREE.Quaternion().setFromAxisAngle(
-      new THREE.Vector3(0, 0, 1),
-      THREE.MathUtils.degToRad(Number(gripper.robotFrontDeg) || 0)
-    );
-    targetQuaternion.multiply(robotFront).normalize();
-    return new THREE.Matrix4().compose(position, targetQuaternion, new THREE.Vector3(1, 1, 1));
-  }, [piece, gripper.robotFrontDeg, offsetPreview?.x, offsetPreview?.y, offsetPreview?.z]);
+    return buildGripperTargetMatrix(gripper, position, getPoseQuaternion(basePose));
+  }, [piece, pose, gripper, offsetPreview]);
+
+  return <GripperModel gripper={gripper} targetMatrix={targetMatrix} />;
+}
+
+/*
+  Dibuix de la pinça amb la seva Z de l'eina col·locada
+  a targetMatrix (en l'espai del grup pare).
+*/
+export function GripperModel({ gripper, targetMatrix, ghost = false }) {
 
   if (gripper.modelType === "IMPORTED_3D" && gripper.modelId) {
     const tcpPositionLocal = new THREE.Vector3(
@@ -64,7 +83,7 @@ export default function AppliedGripper({ gripper, piece, offsetPreview = null })
       new THREE.Vector3(1, 1, 1)
     );
     const worldModelMatrix = targetMatrix.clone().multiply(localTcpMatrix.invert());
-    return <ImportedAppliedModel gripper={gripper} matrix={worldModelMatrix} />;
+    return <ImportedAppliedModel gripper={gripper} matrix={worldModelMatrix} ghost={ghost} />;
   }
 
   const position = new THREE.Vector3();
@@ -88,7 +107,7 @@ export default function AppliedGripper({ gripper, piece, offsetPreview = null })
         </mesh>
         <mesh position={[0, 0, 0.1]} renderOrder={6} raycast={() => null}>
           <planeGeometry args={[sizeX, sizeY]} />
-          <meshStandardMaterial color="#1e3a5f" side={THREE.DoubleSide} transparent opacity={0.82} depthWrite={false} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
+          <meshStandardMaterial color="#1e3a5f" side={THREE.DoubleSide} transparent opacity={ghost ? 0.3 : 0.82} depthWrite={false} polygonOffset polygonOffsetFactor={-1} polygonOffsetUnits={-1} />
         </mesh>
         <mesh position={[0, 0, -(sizeZ + neckLength / 2)]} rotation={[Math.PI / 2, 0, 0]} renderOrder={5} raycast={() => null}>
           <cylinderGeometry args={[neckRadius, neckRadius, neckLength, 32]} />

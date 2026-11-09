@@ -9,7 +9,8 @@ const INITIAL_DIALOG = {
   message: "",
   confirmLabel: "Confirmar",
   cancelLabel: "Cancel·lar",
-  destructive: false
+  destructive: false,
+  secondaryLabel: null
 };
 
 export default function useConfirmDialog() {
@@ -21,16 +22,25 @@ export default function useConfirmDialog() {
   const confirmActionRef =
     useRef(null);
 
+  // Acció opcional d'un tercer botó (entre cancel·lar i confirmar)
+  const secondaryActionRef =
+    useRef(null);
+
   function openConfirmDialog({
     title,
     message,
     confirmLabel = "Confirmar",
     cancelLabel = "Cancel·lar",
     destructive = false,
-    onConfirm
+    onConfirm,
+    secondaryLabel = null,
+    onSecondary = null
   }) {
     confirmActionRef.current =
       onConfirm;
+
+    secondaryActionRef.current =
+      onSecondary;
 
     setConfirmDialog({
       open: true,
@@ -38,12 +48,15 @@ export default function useConfirmDialog() {
       message,
       confirmLabel,
       cancelLabel,
-      destructive
+      destructive,
+      secondaryLabel:
+        onSecondary ? secondaryLabel : null
     });
   }
 
   function closeConfirmDialog() {
     confirmActionRef.current = null;
+    secondaryActionRef.current = null;
 
     setConfirmDialog(
       (currentDialog) => ({
@@ -67,10 +80,25 @@ export default function useConfirmDialog() {
     }
   }
 
+  function confirmDialogSecondaryAction() {
+    const pendingAction =
+      secondaryActionRef.current;
+
+    closeConfirmDialog();
+
+    if (
+      typeof pendingAction ===
+      "function"
+    ) {
+      pendingAction();
+    }
+  }
+
   return {
     confirmDialog,
     openConfirmDialog,
     closeConfirmDialog,
-    confirmDialogAction
+    confirmDialogAction,
+    confirmDialogSecondaryAction
   };
 }

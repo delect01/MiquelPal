@@ -1,6 +1,7 @@
 import { useRef, useState } from "react";
 import { inspectModelFile } from "../utils/modelLoader.js";
 import { saveImportedModel } from "../utils/modelStorage.js";
+import { registerCollisionGeometry } from "../utils/collisionGeometryStore.js";
 
 export default function Import3DButton({ onImported, t }) {
   const inputRef = useRef(null);
@@ -21,6 +22,9 @@ export default function Import3DButton({ onImported, t }) {
         dimensions: inspected.dimensions
       });
 
+      // El volum de col·lisió es comparteix en memòria; no va dins la peça
+      registerCollisionGeometry(saved.id, bottomFace, inspected.collisionGeometry);
+
       onImported({
         name: file.name.replace(/\.[^.]+$/, ""),
         pieceType: "IMPORTED_3D",
@@ -30,7 +34,6 @@ export default function Import3DButton({ onImported, t }) {
         modelFormat: saved.format,
         modelUnit: saved.unit,
         modelBottomFace: bottomFace,
-        collisionGeometry: inspected.collisionGeometry,
         dimensions: inspected.dimensions,
         ...inspected.dimensions,
         topWidth: inspected.dimensions.width,

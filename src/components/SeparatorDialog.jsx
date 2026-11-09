@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import SeparatorPreview from "./SeparatorPreview.jsx";
+import NumericInput from "./NumericInput.jsx";
+import { preserveUnreadableStorageList } from "../utils/projectStorage.js";
 
 const STORAGE_KEY = "pallet-simulator-separator-library";
 
@@ -15,6 +17,8 @@ function loadLibrary() {
 }
 
 function saveLibrary(items) {
+  // Una biblioteca illegible es conserva abans de sobreescriure-la
+  if (!preserveUnreadableStorageList(STORAGE_KEY)) return false;
   try {
     window.localStorage.setItem(STORAGE_KEY, JSON.stringify(items));
     return true;
@@ -36,10 +40,29 @@ function emptyForm() {
   };
 }
 
+// Formulari amb les dades d'un separador ja creat
+function formFromSeparator(separator) {
+  return {
+    name: separator.name || "",
+    width: Number(separator.width),
+    depth: Number(separator.depth),
+    height: Number(separator.height),
+    color: separator.color || "#d4b483",
+    modelType: separator.modelType || "BOX",
+    modelData: separator.modelData || null
+  };
+}
+
+/*
+  Crear un separador nou o, amb editingSeparator,
+  editar el separador seleccionat (onSaveSeparator).
+*/
 export default function SeparatorDialog({
   open,
+  editingSeparator = null,
   onClose,
   onCreateSeparator,
+  onSaveSeparator,
   t
 }) {
   const [form, setForm] = useState(emptyForm);
@@ -52,11 +75,15 @@ export default function SeparatorDialog({
       return;
     }
 
-    setForm(emptyForm());
+    setForm(
+      editingSeparator
+        ? formFromSeparator(editingSeparator)
+        : emptyForm()
+    );
     setLibrary(loadLibrary());
     setSelectedId("");
     setFeedback("");
-  }, [open]);
+  }, [open, editingSeparator]);
 
   if (!open) {
     return null;
@@ -198,7 +225,12 @@ export default function SeparatorDialog({
       return;
     }
 
-    onCreateSeparator(definition);
+    if (editingSeparator) {
+      onSaveSeparator(definition);
+    } else {
+      onCreateSeparator(definition);
+    }
+
     onClose();
   }
 
@@ -235,7 +267,11 @@ export default function SeparatorDialog({
     <div
       role="dialog"
       aria-modal="true"
-      aria-label={t.separatorDialog.createSeparator}
+      aria-label={
+        editingSeparator
+          ? t.separatorDialog.editTitle
+          : t.separatorDialog.createSeparator
+      }
       style={{
         position: "fixed",
         inset: 0,
@@ -275,7 +311,9 @@ export default function SeparatorDialog({
         >
           <div>
             <h2 style={{ margin: 0 }}>
-              {t.separatorDialog.title}
+              {editingSeparator
+                ? t.separatorDialog.editTitle
+                : t.separatorDialog.title}
             </h2>
             <div
               style={{
@@ -284,7 +322,9 @@ export default function SeparatorDialog({
                 fontSize: "13px"
               }}
             >
-              {t.separatorDialog.subtitle}
+              {editingSeparator
+                ? t.separatorDialog.editSubtitle
+                : t.separatorDialog.subtitle}
             </div>
           </div>
 
@@ -424,12 +464,10 @@ export default function SeparatorDialog({
 
             <label style={rowStyle}>
               {t.separatorDialog.widthX}
-            <input
-                type="number"
-                min="1"
+            <NumericInput
                 value={form.width}
-                onChange={(event) => {
-                  update("width", event.target.value);
+                onChange={(value) => {
+                  update("width", value);
                 }}
                 style={inputStyle}
               />
@@ -437,12 +475,10 @@ export default function SeparatorDialog({
 
             <label style={rowStyle}>
               {t.separatorDialog.depthY}
-            <input
-                type="number"
-                min="1"
+            <NumericInput
                 value={form.depth}
-                onChange={(event) => {
-                  update("depth", event.target.value);
+                onChange={(value) => {
+                  update("depth", value);
                 }}
                 style={inputStyle}
               />
@@ -450,13 +486,10 @@ export default function SeparatorDialog({
 
             <label style={rowStyle}>
               {t.separatorDialog.thicknessZ}
-            <input
-                type="number"
-                min="0.1"
-                step="0.1"
+            <NumericInput
                 value={form.height}
-                onChange={(event) => {
-                  update("height", event.target.value);
+                onChange={(value) => {
+                  update("height", value);
                 }}
                 style={inputStyle}
               />
@@ -582,7 +615,9 @@ export default function SeparatorDialog({
               cursor: "pointer"
             }}
           >
-              {t.separatorDialog.createSeparator}
+              {editingSeparator
+                ? t.separatorDialog.saveChanges
+                : t.separatorDialog.createSeparator}
             </button>
         </div>
       </div>

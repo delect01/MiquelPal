@@ -12,7 +12,9 @@ export default function ConfirmDialog({
   cancelLabel = "Cancel·lar",
   destructive = false,
   onConfirm,
-  onCancel
+  onCancel,
+  secondaryLabel = null,
+  onSecondary
 }) {
   useEffect(() => {
     if (!open) {
@@ -136,6 +138,26 @@ export default function ConfirmDialog({
           >
             {cancelLabel}
           </button>
+
+          {secondaryLabel && onSecondary && (
+            <button
+              type="button"
+              onClick={onSecondary}
+              style={{
+                padding:
+                  "9px 16px",
+                border:
+                  "1px solid #2767c5",
+                borderRadius: "6px",
+                background: "#ffffff",
+                color: "#2767c5",
+                fontWeight: 700,
+                cursor: "pointer"
+              }}
+            >
+              {secondaryLabel}
+            </button>
+          )}
 
           <button
             type="button"

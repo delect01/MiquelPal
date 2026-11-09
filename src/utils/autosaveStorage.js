@@ -1,3 +1,5 @@
+import { withoutStoredCollisionGeometry } from "./collisionGeometryStore.js";
+
 export const AUTOSAVE_STORAGE_KEY =
   "pallet-simulator-composition";
 
@@ -42,6 +44,14 @@ export function loadAutosave() {
           ? parsedValue.activeGripper
           : null,
 
+      operationMode:
+        parsedValue.operationMode ?? null,
+
+      conveyorConfigurations:
+        Array.isArray(parsedValue.conveyorConfigurations)
+          ? parsedValue.conveyorConfigurations
+          : [],
+
       layers:
         Array.isArray(parsedValue.layers)
           ? parsedValue.layers
@@ -49,6 +59,13 @@ export function loadAutosave() {
 
       activeLayerId:
         parsedValue.activeLayerId ?? null,
+
+      // Les còpies antigues no en tenen (es fan servir els de la capa)
+      layerGripperOffsets:
+        parsedValue.layerGripperOffsets &&
+        typeof parsedValue.layerGripperOffsets === "object"
+          ? parsedValue.layerGripperOffsets
+          : null,
 
       palletizingSequence:
         Array.isArray(
@@ -84,21 +101,31 @@ export function saveAutosave({
   pieces,
   activePallet,
   activeGripper,
+  operationMode,
+  conveyorConfigurations,
   layers,
   activeLayerId,
+  layerGripperOffsets,
   palletizingSequence,
   selectedPieceId,
   activeProject
 }) {
   try {
+    // Les peces es desen sense el volum de col·lisió (es recalcula del model)
     const autosaveData = {
       version: 1,
       savedAt: new Date().toISOString(),
-      pieces,
+      pieces: pieces.map(withoutStoredCollisionGeometry),
       activePallet,
       activeGripper,
-      layers,
+      operationMode,
+      conveyorConfigurations,
+      layers: layers.map((layer) => ({
+        ...layer,
+        pieces: (layer.pieces ?? []).map(withoutStoredCollisionGeometry)
+      })),
       activeLayerId,
+      layerGripperOffsets,
       palletizingSequence,
       selectedPieceId,
       activeProject

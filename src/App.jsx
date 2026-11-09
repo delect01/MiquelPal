@@ -1,5107 +1,1083 @@
-//App.jsx
-//Motor 3D
-import   { Canvas }   from   "@react-three/fiber";
+import { useState } from "react";
 
-//controls de camera
-import { OrbitControls } from "@react-three/drei";
-import {useEffect,useMemo, useRef, useState } from "react";
-import Pallet from "./components/Pallet.jsx";
-import DraggablePiece from "./components/DraggablePiece.jsx";
-import NewPieceDialog from "./components/NewPieceDialog.jsx";
-import PalletWorldAxes from "./components/PalletWorldAxes.jsx";
-import {PALLET_CONFIG} from "./Config/geometryConfig";
-import PalletDialog from "./components/PalletDialog.jsx";
+import PalletScene from "./components/PalletScene.jsx";
+import ViewCube from "./components/ViewCube.jsx";
+import SelectionRectangle from "./components/SelectionRectangle.jsx";
 import ProjectMenu from "./components/ProjectMenu.jsx";
+import ConfiguratorMenu from "./components/ConfiguratorMenu.jsx";
+import GripperPanel from "./components/GripperPanel.jsx";
+import PieceActionPanel from "./components/PieceActionPanel.jsx";
+import LayerConfigurator from "./components/LayerConfigurator.jsx";
+import PalletizingConfigurator from "./components/PalletizingConfigurator.jsx";
+import MultiSelectionPanel from "./components/MultiSelectionPanel.jsx";
+import SelectedPiecePanel from "./components/SelectedPiecePanel.jsx";
+import NewPieceDialog from "./components/NewPieceDialog.jsx";
+import PalletDialog from "./components/PalletDialog.jsx";
 import OpenProjectDialog from "./components/OpenProjectDialog.jsx";
 import SaveProjectDialog from "./components/SaveProjectDialog.jsx";
 import ConfirmDialog from "./components/ConfirmDialog.jsx";
-import FloorGrid from "./components/FloorGrid.jsx";
 import GripperDialog from "./components/GripperDialog.jsx";
-import AppliedGripper from "./components/AppliedGripper.jsx";
 import SeparatorDialog from "./components/SeparatorDialog.jsx";
-import LayerConfigurator from "./components/LayerConfigurator.jsx";
 import UnsavedLayerDialog from "./components/UnsavedLayerDialog.jsx";
-import PalletizingConfigurator from "./components/PalletizingConfigurator.jsx";
-import PalletizedLayer from "./components/PalletizedLayer.jsx";
-import { buildPalletizingLayers } from "./utils/palletizingUtils.js";
-import {createProjectId, saveProject } from "./utils/projectStorage";
-import ReplicationPreview from "./components/ReplicationPreview.jsx";
-import { buildReplicationCandidates } from "./utils/pieceReplication.js";
-import SelectionRectangle from "./components/SelectionRectangle.jsx";
-import { getPieceIdsInsideRectangle } from "./utils/multiSelection.js";
-import PieceOrderIdLabels from "./components/PieceOrderIdLabels.jsx";
 import LayerOrderIdErrorDialog from "./components/LayerOrderIdErrorDialog.jsx";
-import { applyMagneticSnap } from "./utils/magneticSnap.js";
-import ViewCube from "./components/ViewCube.jsx";
-import {
-  panelSectionStyle,
-  panelInputStyle,
-  readOnlyInputStyle,
-  panelSelectStyle,
-  
-  panelRowStyle
-} from "./styles/appStyles.js";
-
-import {
-  getReferencePointOptions,
-  ensureOrderIds,
-  cloneLayerPieces,
-  getLayerPiecesSignature,
-  createLayerId,
-  createPalletizingInstanceId,
-  roundToThreeDecimals
-} from "./utils/appModelUtils.js";
-import useUndoRedoState from "./hooks/useUndoRedoState.js";
-
-import { getNextOrderId, normalizeOrderIdsAfterDeletion, getOrderIdValidation, createOrderIdErrorMessage} from "./utils/orderIdUtils.js";
-
-import { moveSelectionWithKeyboard } from "./utils/keyboardMovement.js";
-
-import ConfiguratorMenu from "./components/ConfiguratorMenu.jsx";
 import LanguageJokeButton from "./components/LanguageJokeButton.jsx";
-import PieceActionPanel from "./components/PieceActionPanel.jsx";
+import ConveyorConfiguratorPanel from "./components/ConveyorConfiguratorPanel.jsx";
+import ConveyorConfigurationDialog from "./components/ConveyorConfigurationDialog.jsx";
 
 import useTranslator from "./hooks/useTranslator.js";
 import useConfirmDialog from "./hooks/useConfirmDialog.js";
+import useProjectDocument from "./hooks/useProjectDocument.js";
+import useSceneCamera from "./hooks/useSceneCamera.js";
+import usePieceSelection from "./hooks/usePieceSelection.js";
+import usePieceReplication from "./hooks/usePieceReplication.js";
+import usePieceDrag from "./hooks/usePieceDrag.js";
+import useRectangleSelection from "./hooks/useRectangleSelection.js";
+import usePieceActions from "./hooks/usePieceActions.js";
+import useGripperOffsets from "./hooks/useGripperOffsets.js";
+import useSimulation from "./hooks/useSimulation.js";
+import useLayers from "./hooks/useLayers.js";
+import usePalletizing from "./hooks/usePalletizing.js";
+import useProjectFile from "./hooks/useProjectFile.js";
+import useAutosave from "./hooks/useAutosave.js";
+import useKeyboardShortcuts from "./hooks/useKeyboardShortcuts.js";
+import usePieceLibrary from "./hooks/usePieceLibrary.js";
+import useConveyorConfigurations from "./hooks/useConveyorConfigurations.js";
+import useCollisionGeometryVersion from "./hooks/useCollisionGeometryVersion.js";
+import useGraspGroupEditor from "./hooks/useGraspGroupEditor.js";
+import { getGraspGroupMembers, getOperations } from "./utils/graspGroups.js";
+import { evaluateGrasp, getOperationGripperPose } from "./utils/graspGeometry.js";
+import { getOperationOrderId } from "./utils/orderIdUtils.js";
 
-import { loadAutosave, saveAutosave, clearAutosave } from "./utils/autosaveStorage.js";
+import { sidePanelStyle } from "./styles/appStyles.js";
+import { sortPiecesByOrderId } from "./utils/orderIdUtils.js";
+import { roundToThreeDecimals } from "./utils/appModelUtils.js";
+import { findLibraryPieceForPlaced } from "./utils/conveyorConfigurations.js";
+import { getCompositionCenteredAxes } from "./utils/magneticSnap.js";
+import {
+  loadDuplicateSpacing,
+  normalizeDuplicateSpacing,
+  saveDuplicateSpacing
+} from "./utils/pieceReplication.js";
 
-import { isPieceCollidingWithPallet, isPieceOutsidePallet, isPieceCollidingWithPiece } from "./utils/collision";
-import { getDisplayedCoordinates, displayedToCenterCoordinates, getReferenceRobotEuler, threeToPallet} from "./utils/pieceUtils";
+// Imant: distància d'atracció en píxels de pantalla i límits en mm
+const SNAP_DISTANCE_PX = 12;
+const SNAP_DISTANCE_MIN_MM = 3;
+const SNAP_DISTANCE_MAX_MM = 300;
+const SNAP_DISTANCE_MM_FALLBACK = 10;
 
-
-
-
+function noop() {}
 
 export default function App() {
-  
-const {
-  t,
-  activeLanguage,
-  setActiveLanguage,
-  availableLanguages
-} = useTranslator("ca");
-
-const {
-  confirmDialog,
-  openConfirmDialog,
-  closeConfirmDialog,
-  confirmDialogAction
-} = useConfirmDialog();
-
-  const [
-  selectedPieceId,
-  setSelectedPieceId
-] = useState(null);
-
-const [
-  selectedPieceIds,
-  setSelectedPieceIds
-] = useState([]);
-
-const [
-  selectionRectangle,
-  setSelectionRectangle
-] = useState(null);
-
-const [
-  groupMoveX,
-  setGroupMoveX
-] = useState("");
-
-const [
-  groupMoveY,
-  setGroupMoveY
-] = useState("");
-
-
-const [
-  isRectangleSelectionArmed,
-  setIsRectangleSelectionArmed
-] = useState(false);
-
-  const [
-    isDragging,
-    setIsDragging
-  ] = useState(false);
-
-  const [
-    isNewPieceDialogOpen,
-    setIsNewPieceDialogOpen
-  ] = useState(false);
-
-  const [
-    isPalletDialogOpen,
-    setIsPalletDialogOpen
-  ] = useState(false);
-
-const [
-  isGripperDialogOpen,
-  setIsGripperDialogOpen
-] = useState(false);
-
-const [
-  isSeparatorDialogOpen,
-  setIsSeparatorDialogOpen
-] = useState(false);
-
-const [
-  activeGripper,
-  setActiveGripper
-] = useState(null);
-
-
-const [
-  isGripperVisible,
-  setIsGripperVisible
-] = useState(false);
-
-
-const [
-  isOpenProjectDialogOpen,
-  setIsOpenProjectDialogOpen
-] = useState(false);
-
-const [
-  activeConfigurator,
-  setActiveConfigurator
-] = useState(null);
-
-const [
-  isLanguageMessageVisible,
-  setIsLanguageMessageVisible
-] = useState(false);
-
-const [
-  isSaveProjectDialogOpen,
-  setIsSaveProjectDialogOpen
-] = useState(false);
-
-const [
-  saveProjectSuggestedName,
-  setSaveProjectSuggestedName
-] = useState("");
-
-const [
-  replicationPreview,
-  setReplicationPreview
-] = useState(null);
-
-const replicationPreviewRef =
-  useRef(null);
-const sceneCameraRef =
-  useRef(null);
-
-const orbitControlsRef =
-  useRef(null);
-
-
-const canvasElementRef =
-  useRef(null);
-
-const groupDragRef =
-  useRef(null);
-
-const selectionRectangleRef =
-  useRef(null);
-
-
-
-  const [
-    inputX,
-    setInputX
-  ] = useState("");
-
-  const [
-    inputY,
-    setInputY
-  ] = useState("");
-
-  const [
-    inputZ,
-    setInputZ
-  ] = useState("");
-
-  const [
-    inputRX,
-    setInputRX
-  ] = useState("");
-
-  const [
-    inputRY,
-    setInputRY
-  ] = useState("");
-
-  const [
-    inputRZ,
-    setInputRZ
-  ] = useState("");
+  const {
+    t,
+    activeLanguage,
+    setActiveLanguage,
+    availableLanguages
+  } = useTranslator("ca");
 
   const {
-  state: pieces,
-  setState: setPieces,
-  undo: undoPieces,
-  redo: redoPieces,
-  beginTransaction:
-    beginPiecesTransaction,
-  endTransaction:
-    endPiecesTransaction,
-  cancelTransaction:
-    cancelPiecesTransaction,
-  resetHistory:
-    resetPiecesHistory
-} = useUndoRedoState(
-  [],
-  {
-    historyLimit: 100
-  }
-);
+    confirmDialog,
+    openConfirmDialog,
+    closeConfirmDialog,
+    confirmDialogAction,
+    confirmDialogSecondaryAction
+  } = useConfirmDialog();
 
-  const [
-  activePallet,
-  setActivePallet
-] = useState(() => ({
-  ...PALLET_CONFIG
-}));
+  const projectDocument = useProjectDocument(t);
 
-const orbitTarget =
-  useMemo(
-    () => [
-      0,
-      -Number(
-        activePallet.sizeZ
-      ) / 2,
-      0
-    ],
-    [
-      activePallet.sizeZ
-    ]
-  );
-
-// CAMERA_TARGET_SYNC_PALLET_CENTER
-useEffect(() => {
-  const controls =
-    orbitControlsRef.current;
-
-  if (!controls) {
-    return;
-  }
+  const {
+    pieces,
+    setPieces,
+    activePallet,
+    setActivePallet,
+    activeGripper,
+    setActiveGripper,
+    layers,
+    activeLayerId,
+    layerName,
+    setLayerName,
+    palletizingSequence,
+    selectedPalletizingInstanceId,
+    setSelectedPalletizingInstanceId,
+    activeProject,
+    hasUnsavedChanges
+  } = projectDocument;
 
   /*
-    OrbitControls conserva internament el target.
-    Actualitzar nomes la prop target no sempre
-    substitueix el valor intern despres de canvis
-    de projecte, palet o ViewCube.
+    Estat de la interfície (no es desa amb el
+    projecte).
   */
-  controls.target.set(
-    Number(orbitTarget[0]) || 0,
-    Number(orbitTarget[1]) || 0,
-    Number(orbitTarget[2]) || 0
-  );
+  const [activeConfigurator, setActiveConfigurator] =
+    useState(null);
+  const [isDragging, setIsDragging] = useState(false);
+  const [isGripperVisible, setIsGripperVisible] =
+    useState(false);
 
-  controls.update();
-}, [
-  orbitTarget
-]);
-
+  const [isNewPieceDialogOpen, setIsNewPieceDialogOpen] =
+    useState(false);
+  // Peça que s'edita amb el diàleg de peça (null = nova)
+  const [editingPieceId, setEditingPieceId] = useState(null);
+  const [editingSeparatorId, setEditingSeparatorId] = useState(null);
+  const [isSeparatorDialogOpen, setIsSeparatorDialogOpen] =
+    useState(false);
+  const [isPalletDialogOpen, setIsPalletDialogOpen] =
+    useState(false);
+  const [isGripperDialogOpen, setIsGripperDialogOpen] =
+    useState(false);
   const [
-  activeProject,
-  setActiveProject
-] = useState(() => ({
-  id: null,
-  name:
-    t.project.unnamed,
-  createdAt: null
-}));
-
-  const [
-    hasUnsavedChanges,
-    setHasUnsavedChanges
+    isLanguageMessageVisible,
+    setIsLanguageMessageVisible
   ] = useState(false);
 
-const [
-  hasHandledAutosaveRecovery,
-  setHasHandledAutosaveRecovery
-] = useState(false);
-
-const [
-  layers,
-  setLayers
-] = useState([]);
-
-const [
-  activeLayerId,
-  setActiveLayerId
-] = useState(null);
-
-const [
-  layerName,
-  setLayerName
-] = useState("");
-
-const [
-  pendingLayerId,
-  setPendingLayerId
-] = useState(null);
-
-const [
-  isPendingNewLayer,
-  setIsPendingNewLayer
-] = useState(false);
-
-const [
-  isUnsavedLayerDialogOpen,
-  setIsUnsavedLayerDialogOpen
-] = useState(false);
-
-
-const [
-  showOrderIds,
-  setShowOrderIds
-] = useState(false);
-
-const [
-  showGripperOffsets,
-  setShowGripperOffsets
-] = useState(false);
-
-const [
-  gripperOffsetPreviewMode,
-  setGripperOffsetPreviewMode
-] = useState(null);
-
-const [
-  currentLayerGripperOffsets,
-  setCurrentLayerGripperOffsets
-] = useState({
-  approach: {
-    x: 0,
-    y: 0,
-    z: 0
-  },
-  retreat: {
-    x: 0,
-    y: 0,
-    z: 0
-  }
-});
-
-const [
-  orderIdErrorDialog,
-  setOrderIdErrorDialog
-] = useState({
-  open: false,
-  message: ""
-});
-
-
-
-
-
-
-
-
- const [
-  palletizingSequence,
-  setPalletizingSequence
-] = useState([]);
-
-const [
-  selectedPalletizingInstanceId,
-  setSelectedPalletizingInstanceId
-] = useState(null);
-  
-const hasCompletedInitialRender =
-  useRef(false);
-
-const suppressNextChangeDetection =
-  useRef(false);
-
-const isSavingProjectRef =
-  useRef(false);
-
-function applyRecoveredAutosave(
-  autosaveData
-) {
-  const recoveredPieces =
-  ensureOrderIds(
-    autosaveData.pieces
-  );
-
-  const recoveredPallet =
-    autosaveData.activePallet
-      ? {
-          ...autosaveData.activePallet
-        }
-      : {
-          ...PALLET_CONFIG
-        };
-
-  const recoveredLayers =
-    Array.isArray(
-      autosaveData.layers
-    )
-      ? autosaveData.layers.map(
-          (layer) => ({
-            ...layer,
-
-            pieces:
-              ensureOrderIds(
-              layer.pieces
-            )
-          })
-        )
-      : [];
-
-  const recoveredPalletizingSequence =
-    Array.isArray(
-      autosaveData.palletizingSequence
-    )
-      ? autosaveData
-          .palletizingSequence
-          .filter(
-            (item) =>
-              recoveredLayers.some(
-                (layer) =>
-                  layer.id ===
-                  item.sourceLayerId
-              )
-          )
-          .map(
-            (item) => ({
-              ...item
-            })
-          )
-      : [];
-
-  setPalletizingSequence(
-    recoveredPalletizingSequence
-  );
-
-  setSelectedPalletizingInstanceId(
-    null
-  );
-
-  setLayers(
-    recoveredLayers
-  );
-
-const recoveredActiveLayer =
-  recoveredLayers.find(
-    (layer) =>
-      layer.id ===
-      autosaveData.activeLayerId
-  ) ?? null;
-
-setActiveLayerId(
-  recoveredActiveLayer?.id ??
-  null
-);
-
-setLayerName(
-  recoveredActiveLayer?.name ??
-  ""
-);
-
-  const recoveredSelectedPieceId =
-    recoveredPieces.some(
-      (piece) =>
-        piece.id ===
-        autosaveData.selectedPieceId
-    )
-      ? autosaveData.selectedPieceId
-      : null;
-
-  resetPiecesHistory(
-  recoveredPieces
-);
-
-  setActivePallet(
-    recoveredPallet
-  );
-
-  if (
-  recoveredSelectedPieceId !==
-  null
-) {
-  applyPieceSelection([
-    recoveredSelectedPieceId
-  ]);
-} else {
-  clearPieceSelection();
-}
-
-  setActiveGripper(
-    autosaveData.activeGripper
-      ? {
-         ...autosaveData.activeGripper
-       }
-      : null
-  );
-
-  if (
-    autosaveData.activeProject
-  ) {
-    setActiveProject({
-      id:
-        autosaveData.activeProject.id ??
-        null,
-
-      name:
-        autosaveData.activeProject.name ??
-        t.project.recovered,
-
-      createdAt:
-        autosaveData.activeProject.createdAt ??
-        null
-    });
-  } else {
-    setActiveProject({
-      id: null,
-      name: t.project.recovered,
-      createdAt: null
-    });
-  }
-
-  setHasUnsavedChanges(true);
-}
-
-
-
-
-
-
-
-
-
-/*
-  1. Comprova si existeix una sessió
-  anterior recuperable.
-
-  Aquest efecte només s'executa una vegada
-  quan s'obre l'aplicació.
-*/
-useEffect(() => {
-  const autosaveData =
-    loadAutosave();
-
-  if (!autosaveData) {
-    setHasHandledAutosaveRecovery(
-      true
-    );
-
-    return;
-  }
-
-  const hasSavedPieces =
-    Array.isArray(
-      autosaveData.pieces
-    ) &&
-    autosaveData.pieces.length > 0;
-
-  const savedPalletString =
-    JSON.stringify(
-      autosaveData.activePallet
-    );
-
-  const defaultPalletString =
-    JSON.stringify(
-      PALLET_CONFIG
-    );
-
-  const hasDifferentPallet =
-    autosaveData.activePallet &&
-    savedPalletString !==
-      defaultPalletString;
-
-  const hasRecoverableContent =
-    hasSavedPieces ||
-    hasDifferentPallet;
-
-  if (!hasRecoverableContent) {
-    clearAutosave();
-
-
-    setHasHandledAutosaveRecovery(
-      true
-    );
-
-    return;
-  }
-
-  /* AUTOSAVE_RECOVERY_PROMPT_GLOBAL_GUARD */
-  if (
-    window.__palletAutosaveRecoveryPromptHandled ===
-    true
-  ) {
-    setHasHandledAutosaveRecovery(
-      true
-    );
-
-    return;
-  }
+  const camera = useSceneCamera(activePallet.sizeZ);
 
   /*
-    La marca es posa ABANS d'obrir el confirm.
-    Així, una segona execució simultània de
-    l'efecte no pot obrir un altre popup.
-
-    En recarregar la pàgina es crea un nou
-    objecte window i la marca torna a començar.
+    Quan s'acaba de calcular el volum de col·lisió d'un
+    model importat, l'escena es torna a dibuixar
+    (col·lisions, cares i TCP amb la forma real).
   */
-  window.__palletAutosaveRecoveryPromptHandled =
-    true;
+  useCollisionGeometryVersion();
 
-  const shouldRecover =
-    window.confirm(
-      t.project.previousSession
-    );
+  // Peces guardades (biblioteca) i configuracions de cinta
+  const pieceLibrary = usePieceLibrary();
+  const conveyor = useConveyorConfigurations({
+    projectDocument,
+    pieceLibrary,
+    openConfirmDialog,
+    t
+  });
 
-  if (shouldRecover) {
-    applyRecoveredAutosave(
-      autosaveData
-    );
-  } else {
-    clearAutosave();
-
-  }
-
-  setHasHandledAutosaveRecovery(
-    true
-  );
-}, []);
-
-
-
-
-
-
-/*
-  Detecta canvis físics a la composició
-  i guarda una còpia de recuperació.
-*/
-useEffect(() => {
-  if (!hasHandledAutosaveRecovery) {
-    return;
-  }
+  const {
+    selectedPieceId,
+    selectedPieceIds,
+    clearPieceSelection,
+    applyPieceSelection,
+    selectPiece
+  } = usePieceSelection();
 
   /*
-    La primera execució després de comprovar
-    la recuperació no és una modificació
-    feta per l'usuari.
+    Una peça d'una agafada múltiple se selecciona amb
+    tot el grup; amb Alt, només ella.
   */
-  if (!hasCompletedInitialRender.current) {
-    hasCompletedInitialRender.current = true;
-    return;
+  function getSelectionIdsForPiece(pieceId, options = {}) {
+    const piece = pieces.find((item) => item.id === pieceId);
+    const members = options.single
+      ? []
+      : getGraspGroupMembers(pieces, piece?.graspGroupId ?? null);
+
+    return members.length > 0
+      ? members.map((member) => member.id)
+      : [pieceId];
   }
 
-  /*
-    Crear un projecte nou o obrir un projecte
-    guardat tampoc és una modificació manual.
-  */
-  if (suppressNextChangeDetection.current) {
-    suppressNextChangeDetection.current = false;
-    return;
-  }
+  function selectPieceOrGrasp(pieceId, additive = false, options = {}) {
+    const ids = getSelectionIdsForPiece(pieceId, options);
 
-  setHasUnsavedChanges(true);
-
-  saveAutosave({
-  pieces,
-  activePallet,
-  activeGripper,
-  layers,
-  activeLayerId,
-  palletizingSequence,
-  selectedPieceId,
-  activeProject
-});
-
-}, [
-  pieces,
-  activePallet,
-  activeGripper,
-  layers,
-  activeLayerId,
-  palletizingSequence,
-]);
-
-
-
-/*
-  Fa un últim guardat abans de tancar
-  o recarregar la pàgina.
-*/
-useEffect(() => {
-  function handleBeforeUnload() {
-    if (!hasUnsavedChanges) {
+    if (ids.length === 1) {
+      selectPiece(pieceId, additive);
       return;
     }
 
-    saveAutosave({
-  pieces,
-  activePallet,
-  activeGripper,
-  layers,
-  activeLayerId,
-  palletizingSequence,
-  selectedPieceId,
-  activeProject
-});
+    if (!additive) {
+      applyPieceSelection(ids);
+      return;
+    }
+
+    const isGroupSelected = ids.every((id) => selectedPieceIds.includes(id));
+    applyPieceSelection(
+      isGroupSelected
+        ? selectedPieceIds.filter((id) => !ids.includes(id))
+        : [...selectedPieceIds, ...ids]
+    );
   }
 
-  window.addEventListener(
-    "beforeunload",
-    handleBeforeUnload
+  const selectedData = pieces.find(
+    (piece) => piece.id === selectedPieceId
   );
 
-  return () => {
-    window.removeEventListener(
-      "beforeunload",
-      handleBeforeUnload
-    );
-  };
-}, [
-  pieces,
-  activePallet,
-  activeGripper,
-  layers,
-  activeLayerId,
-  palletizingSequence,
-  selectedPieceId,
-  activeProject,
-  hasUnsavedChanges
-]);
+  /*
+    Agafada múltiple seleccionada sencera: es tracta com
+    una sola operació (pinça, offsets i simulació de la
+    peça guia, amb el TCP del grup).
+  */
+  const selectedGraspMembers =
+    selectedPieceIds.length > 1
+      ? getGraspGroupMembers(
+          pieces,
+          pieces.find((piece) => piece.id === selectedPieceIds[0])
+            ?.graspGroupId ?? null
+        )
+      : [];
 
+  const selectedGraspLead =
+    selectedGraspMembers.length === selectedPieceIds.length &&
+    selectedGraspMembers.every((piece) => selectedPieceIds.includes(piece.id))
+      ? selectedGraspMembers.find((piece) => piece.graspGroupLead) ??
+        selectedGraspMembers[0]
+      : null;
 
-
-
-
-
-  const selectedData =
-    pieces.find(
-      (piece) =>
-        piece.id ===
-        selectedPieceId
-    );
-
-const effectiveGripperOffsets =
-  selectedData?.gripperOffsets ??
-  currentLayerGripperOffsets;
-
-const activeGripperOffsetPreview =
-  gripperOffsetPreviewMode
-    ? effectiveGripperOffsets[
-        gripperOffsetPreviewMode
-      ] ?? null
-    : null;
-
-const shouldShowAppliedGripper =
-  isGripperVisible ||
-  Boolean(
-    gripperOffsetPreviewMode
-  );
-
-    const activeLayer =
-  layers.find(
-    (layer) =>
-      layer.id ===
-      activeLayerId
-  ) ?? null;
-
-const currentLayerSignature =
-  getLayerPiecesSignature(
-    pieces
-  );
-
-const savedLayerSignature =
-  activeLayer
-    ? getLayerPiecesSignature(
-        activeLayer.pieces
-      )
-    : null;
-
-const isCurrentLayerDirty =
-  activeLayer
-    ? currentLayerSignature !==
-      savedLayerSignature
-    : pieces.length > 0;
-
-const orderIdValidation =
-  useMemo(
-    () =>
-      getOrderIdValidation(
-        pieces
-      ),
-    [
-      pieces
-    ]
-  );
-
-  const palletizedLayerInstances =
-  useMemo(
-    () =>
-      buildPalletizingLayers(
-        palletizingSequence,
-        layers
-      ),
-    [
-      palletizingSequence,
-      layers
-    ]
-  );
+  // Peça sobre la qual es posa la pinça (sola o guia de l'agafada)
+  const gripperTargetPiece = selectedData ?? selectedGraspLead;
 
   const selectedIsSeparator =
-  selectedData?.pieceCategory ===
-  "SEPARATOR";
+    selectedData?.pieceCategory === "SEPARATOR";
 
-const selectedIsRegularPiece =
-  Boolean(
+  const selectedIsRegularPiece = Boolean(
+    selectedData && !selectedIsSeparator
+  );
+
+  // Cada configurador només mostra el seu tipus d'element
+  /*
+    Guies de centrat: només amb tot el material de la
+    composició seleccionat. Indiquen en quins eixos el
+    conjunt està centrat al palet (X, Y o tots dos: creu).
+  */
+  const isWholeCompositionSelected =
+    pieces.length > 0 &&
+    pieces.every((piece) => selectedPieceIds.includes(piece.id));
+
+  const centerGuides = isWholeCompositionSelected
+    ? getCompositionCenteredAxes(pieces, activePallet)
+    : null;
+
+  const shouldShowSelectedData =
     selectedData &&
-    !selectedIsSeparator
+    ((activeConfigurator === "pieces" &&
+      selectedIsRegularPiece) ||
+      (activeConfigurator === "separators" &&
+        selectedIsSeparator));
+
+  /*
+    Distància de duplicació (X i Y del palet, mm): la fan
+    servir Duplicar i Ctrl + arrossegar. Es desa al
+    navegador i es manté entre sessions.
+  */
+  const [duplicateSpacing, setDuplicateSpacingState] = useState(
+    loadDuplicateSpacing
   );
 
-const shouldShowSelectedData =
-  selectedData &&
-  (
-    (
-      activeConfigurator ===
-      "pieces" &&
-      selectedIsRegularPiece
-    ) ||
-    (
-      activeConfigurator ===
-      "separators" &&
-      selectedIsSeparator
-    )
-  );
+  function changeDuplicateSpacing(nextSpacing) {
+    const normalized = normalizeDuplicateSpacing(nextSpacing);
+    setDuplicateSpacingState(normalized);
+    saveDuplicateSpacing(normalized);
+  }
 
-useEffect(() => {
-  
-  function handleGlobalKeyDown(
-    event
-  ) {
-    const activeElement =
-      document.activeElement;
-
-    const isWritingInField =
-      activeElement instanceof
-        HTMLInputElement ||
-      activeElement instanceof
-        HTMLTextAreaElement ||
-      activeElement instanceof
-        HTMLSelectElement ||
-      activeElement
-        ?.isContentEditable ===
-        true;
-
-    /*
-      No executem dreceres mentre
-      s'està editant un camp.
-    */
-    if (isWritingInField) {
-      return;
-    }
-
-    const openDialog =
-      document.querySelector(
-        '[role="dialog"][aria-modal="true"]'
-      );
-
-      
-
-    if (openDialog) {
-      return;
-    }
-
-const pressedKey =
-  event.key.toLowerCase();
-
-const isUndoShortcut =
-  event.ctrlKey &&
-  !event.shiftKey &&
-  pressedKey === "z";
-
-const isRedoShortcut =
-  event.ctrlKey &&
-  (
-    pressedKey === "y" ||
-    (
-      event.shiftKey &&
-      pressedKey === "z"
-    )
-  );
-
-if (isUndoShortcut) {
-  event.preventDefault();
-
-  undoPieces();
-
-  return;
-}
-
-if (isRedoShortcut) {
-  event.preventDefault();
-
-  redoPieces();
-
-  return;
-}
-
-
-    const keyboardMoveHandled =
-  moveSelectionWithKeyboard({
-    event,
-    selectedPieceIds,
-    setPieces
+  const replication = usePieceReplication({
+    pieces,
+    setPieces,
+    activePallet,
+    duplicateSpacing
   });
 
-if (
-  keyboardMoveHandled
-) {
-  return;
-}
+  /*
+    Distància d'atracció de l'imant: uns pocs píxels de
+    pantalla convertits a mm segons el zoom actual (amb
+    més zoom, l'imant és més precís; amb menys, abasta
+    més).
+  */
+  function getSnapDistance() {
+    const sceneCamera = camera.sceneCameraRef.current;
+    const canvasElement = camera.canvasElementRef.current;
+    const controls = camera.orbitControlsRef.current;
 
-    /*
-      Seleccionar totes les peces
-      i separadors de la composició.
-    */
-    if (
-      event.ctrlKey &&
-      event.key.toLowerCase() ===
-        "a" &&
-      activeConfigurator !==
-        "palletizing"
-    ) {
-      event.preventDefault();
-
-      applyPieceSelection(
-        pieces.map(
-          (piece) =>
-            piece.id
-        )
-      );
-
-      return;
+    if (!sceneCamera || !canvasElement || !canvasElement.clientHeight) {
+      return SNAP_DISTANCE_MM_FALLBACK;
     }
 
-    /*
-      Dreceres específiques del
-      configurador de paletitzat.
-    */
-    if (
-      activeConfigurator ===
-      "palletizing"
-    ) {
-      if (
-        event.key ===
-        "Escape"
-      ) {
-        if (
-          selectedPalletizingInstanceId ===
-          null
-        ) {
-          return;
-        }
+    const lookAtDistance = controls?.target
+      ? sceneCamera.position.distanceTo(controls.target)
+      : sceneCamera.position.length();
+    const visibleHeight =
+      2 * lookAtDistance * Math.tan(((sceneCamera.fov ?? 35) * Math.PI) / 360);
+    const millimetresPerPixel = visibleHeight / canvasElement.clientHeight;
 
-        event.preventDefault();
+    return Math.min(
+      SNAP_DISTANCE_MAX_MM,
+      Math.max(SNAP_DISTANCE_MIN_MM, SNAP_DISTANCE_PX * millimetresPerPixel)
+    );
+  }
 
-        setSelectedPalletizingInstanceId(
-          null
-        );
+  const drag = usePieceDrag({
+    pieces,
+    setPieces,
+    beginPiecesTransaction:
+      projectDocument.beginPiecesTransaction,
+    endPiecesTransaction: projectDocument.endPiecesTransaction,
+    selectedPieceIds,
+    applyPieceSelection,
+    setIsDragging,
+    activePallet,
+    getSnapDistance,
+    getSelectionIdsForPiece
+  });
 
-        return;
+  const rectangle = useRectangleSelection({
+    pieces,
+    activeConfigurator,
+    applyPieceSelection,
+    cancelPieceReplication: replication.cancelPieceReplication,
+    setIsDragging,
+    sceneCameraRef: camera.sceneCameraRef,
+    canvasElementRef: camera.canvasElementRef
+  });
+
+  const pieceActions = usePieceActions({
+    pieces,
+    setPieces,
+    selectedData,
+    selectedPieceIds,
+    applyPieceSelection,
+    clearPieceSelection,
+    duplicateSpacing
+  });
+
+  const gripperOffsets = useGripperOffsets({
+    projectDocument,
+    setPieces,
+    selectedData: gripperTargetPiece,
+    setIsGripperVisible
+  });
+
+  const shouldShowAppliedGripper =
+    isGripperVisible ||
+    Boolean(gripperOffsets.gripperOffsetPreviewMode);
+
+  const simulation = useSimulation({
+    selectedPieceId: gripperTargetPiece?.id ?? null,
+    activeConfigurator
+  });
+
+  const simulatedPiece = simulation.offsetSimulation
+    ? pieces.find(
+        (piece) =>
+          piece.id === simulation.offsetSimulation.pieceId
+      )
+    : null;
+
+  const simulatedMembers = simulatedPiece
+    ? getGraspGroupMembers(pieces, simulatedPiece.graspGroupId ?? null)
+    : [];
+
+  // Offsets propis de la peça o, si no en té, els de la capa
+  const sceneOffsetSimulation = simulatedPiece
+    ? {
+        ...simulation.offsetSimulation,
+        piece: simulatedPiece,
+        // Agafada múltiple: tot el grup es mou amb la pinça
+        pieces: simulatedMembers.length > 0 ? simulatedMembers : [simulatedPiece],
+        pose: getOperationGripperPose(pieces, simulatedPiece),
+        offset: (simulatedPiece.gripperOffsets ??
+          gripperOffsets.currentLayerGripperOffsets)[
+          simulation.offsetSimulation.mode
+        ]
       }
+    : null;
 
+  const simulatedLayer = simulation.layerSimulation
+    ? layers.find(
+        (layer) => layer.id === simulation.layerSimulation.layerId
+      )
+    : null;
 
+  /*
+    La capa activa es simula amb les peces i els offsets
+    que hi ha ara a l'editor (encara que no s'hagin
+    desat), així els orderId nous es respecten de
+    seguida. Les altres capes, amb la seva còpia desada.
+  */
+  const isSimulatingActiveLayer =
+    simulatedLayer?.id === activeLayerId;
 
-      if (
-        event.key ===
-        "Delete"
-      ) {
-        if (
-          selectedPalletizingInstanceId ===
-          null
-        ) {
-          return;
-        }
+  const layerGenericOffsets = isSimulatingActiveLayer
+    ? gripperOffsets.currentLayerGripperOffsets
+    : simulatedLayer?.gripperOffsets ??
+      gripperOffsets.currentLayerGripperOffsets;
 
-        event.preventDefault();
-
-        deletePalletizingLayer(
-          selectedPalletizingInstanceId
-        );
-
-        return;
+  // Cada peça fa servir els seus offsets o els de la capa
+  const sceneLayerSimulation = simulatedLayer
+    ? {
+        runId: simulation.layerSimulation.runId,
+        speed: simulation.layerSimulation.speed,
+        pieces: sortPiecesByOrderId(
+          isSimulatingActiveLayer ? pieces : simulatedLayer.pieces
+        ),
+        getPieceOffsets: (piece) =>
+          piece.gripperOffsets ?? layerGenericOffsets
       }
+    : null;
 
-      return;
-    }
+  // Prémer el títol de l'offset torna a la vista estàtica
+  function changeGripperOffsetPreviewMode(nextMode) {
+    simulation.stopSimulation();
+    gripperOffsets.changeGripperOffsetPreviewMode(nextMode);
+  }
 
-    /*
-      Escape cancel·la el rectangle
-      o neteja la selecció.
-    */
-    if (
-      event.key ===
-      "Escape"
-    ) {
-      if (
-        selectionRectangleRef.current
-      ) {
-        event.preventDefault();
+  const layerEditor = useLayers({
+    projectDocument,
+    clearPieceSelection,
+    currentLayerGripperOffsets:
+      gripperOffsets.currentLayerGripperOffsets,
+    loadLayerGripperOffsets:
+      gripperOffsets.loadLayerGripperOffsets,
+    openConfirmDialog,
+    t
+  });
 
-        selectionRectangleRef.current =
-          null;
-
-        setSelectionRectangle(
-          null
-        );
-
-        setIsDragging(
-          false
-        );
-
-        return;
-      }
-
-      if (
-        selectedPieceIds.length ===
-        0
-      ) {
-        return;
-      }
-
-      event.preventDefault();
-
+  const graspEditor = useGraspGroupEditor({
+    pieces,
+    setPieces,
+    gripper: activeGripper,
+    onStart: () => {
+      simulation.stopSimulation();
+      layerEditor.stopDefiningOrderIds();
       clearPieceSelection();
 
-      return;
-    }
-
-    /*
-      Supr elimina totes les peces i
-      separadors seleccionats.
-
-      Després, els orderId restants
-      es renumeren automàticament.
-    */
-    if (
-      event.key ===
-      "Delete"
-    ) {
-      if (
-        selectedPieceIds.length ===
-        0
-      ) {
-        return;
+      if (!layerEditor.showOrderIds) {
+        layerEditor.toggleOrderIds();
       }
-
-      event.preventDefault();
-
-      deleteSelectedPieces();
-
-      return;
-    }
-  }
-
-  window.addEventListener(
-    "keydown",
-    handleGlobalKeyDown
-  );
-
-  return () => {
-    window.removeEventListener(
-      "keydown",
-      handleGlobalKeyDown
-    );
-  };
-}, [
-  activeConfigurator,
-  pieces,
-  selectedPieceIds,
-  selectedPalletizingInstanceId,
-  undoPieces,
-  redoPieces,
-  setPieces
-]);
-
-
-
-const referenceEuler =
-  selectedData
-    ? getReferenceRobotEuler(
-        selectedData
-      )
-    : {
-        rx: 0,
-        ry: 0,
-        rz: 0
-      };
-
-
-useEffect(() => {
-if (selectedData) {
-
-  const displayed =
-    getDisplayedCoordinates(selectedData);
-    setInputX(
-      String(
-        roundToThreeDecimals(
-          displayed.x
-        )
-      )
-    );
-
-    setInputY(
-      String(
-        roundToThreeDecimals(
-          displayed.y
-        )
-      )
-    );
-
-    setInputZ(
-      String(
-        roundToThreeDecimals(
-          displayed.z
-        )
-      )
-    );
-    setInputRX(String(selectedData.rxDeg));
-    setInputRY(String(selectedData.ryDeg));
-    setInputRZ(String(selectedData.rzDeg));
-}
-}, [
-  selectedPieceId,
-  selectedData?.x,
-  selectedData?.y,
-  selectedData?.z,
-  selectedData?.rxDeg,
-  selectedData?.ryDeg,
-  selectedData?.rzDeg,
-  selectedData?.referencePoint,
-  selectedData?.faceOffsetX,
-  selectedData?.faceOffsetY
-]);
-
-useEffect(() => {
-  function handlePointerMove(
-    event
-  ) {
-    const currentRectangle =
-      selectionRectangleRef.current;
-
-    if (!currentRectangle) {
-      return;
-    }
-
-    const nextRectangle = {
-      ...currentRectangle,
-      currentX:
-        event.clientX,
-      currentY:
-        event.clientY
-    };
-
-    selectionRectangleRef.current =
-      nextRectangle;
-
-    setSelectionRectangle(
-      nextRectangle
-    );
-  }
-
-  function handlePointerUp() {
-    const currentRectangle =
-      selectionRectangleRef.current;
-
-    if (!currentRectangle) {
-      return;
-    }
-
-    const width =
-      Math.abs(
-        currentRectangle.currentX -
-        currentRectangle.startX
-      );
-
-    const height =
-      Math.abs(
-        currentRectangle.currentY -
-        currentRectangle.startY
-      );
-
-    if (
-      width >= 4 ||
-      height >= 4
-    ) {
-      const selectedIds =
-        getPieceIdsInsideRectangle({
-          pieces,
-          rectangle:
-            currentRectangle,
-          camera:
-            sceneCameraRef.current,
-          canvasElement:
-            canvasElementRef.current
-        });
-
-      applyPieceSelection(
-        selectedIds
-      );
-    }
-
-    selectionRectangleRef.current =
-      null;
-
-    setSelectionRectangle(
-      null
-    );
-
-    setIsDragging(false);
-  }
-
-  window.addEventListener(
-    "pointermove",
-    handlePointerMove
-  );
-
-  window.addEventListener(
-    "pointerup",
-    handlePointerUp
-  );
-
-  return () => {
-    window.removeEventListener(
-      "pointermove",
-      handlePointerMove
-    );
-
-    window.removeEventListener(
-      "pointerup",
-      handlePointerUp
-    );
-  };
-}, [
-  pieces
-]);
-
-
-
-
-
-
-
-
-
-
-
-function updatePieceField(field, value) {
-  if (value === "") return;
-
-  const numericValue = parseFloat(value);
-
-  if (isNaN(numericValue)) return;
-
-  const positionFields = ["x", "y", "z"];
-
-  const validatedValue = positionFields.includes(field)
-    ? roundToThreeDecimals(numericValue)
-    : numericValue;
-
-  setPieces((currentPieces) =>
-    currentPieces.map((piece) =>
-      piece.id === selectedPieceId
-        ? { ...piece, [field]: validatedValue } : piece
-    )
-  );
-}
-
-function updateDisplayedCoordinates(
-  axis,
-  displayedValue
-) {
-
-  if (displayedValue === "") return;
-
-  const numericValue =
-    parseFloat(displayedValue);
-
-  if (isNaN(numericValue)) return;
-
-  const displayed =
-    getDisplayedCoordinates(
-      selectedData
-    );
-
-  const converted =
-    displayedToCenterCoordinates(
-      selectedData,
-
-      axis === "x"
-        ? numericValue
-        : displayed.x,
-
-      axis === "y"
-        ? numericValue
-        : displayed.y,
-
-      axis === "z"
-        ? numericValue
-        : displayed.z
-    );
-
-  setPieces((currentPieces) =>
-    currentPieces.map((piece) =>
-      piece.id === selectedPieceId
-        ? {
-            ...piece,
-
-            x: roundToThreeDecimals(
-              converted.x
-            ),
-
-            y: roundToThreeDecimals(
-              converted.y
-            ),
-
-            z: roundToThreeDecimals(
-              converted.z
-            )
-          }
-        : piece
-    )
-  );
-}
-
-
-
-// Actualitza la posició d'una peça durant l'arrossegament
-function movePiece(
-  pieceId,
-  threeX,
-  threeZ
-) {
-  const targetPosition =
-    threeToPallet(
-      threeX,
-      0,
-      threeZ
-    );
-
-  const dragData =
-    groupDragRef.current;
-
-  if (
-    !dragData ||
-    dragData.sourcePieceId !==
-      pieceId
-  ) {
-    setPieces(
-      (currentPieces) =>
-        currentPieces.map(
-          (piece) =>
-            piece.id === pieceId
-              ? {
-                  ...piece,
-
-                  x:
-                    roundToThreeDecimals(
-                      targetPosition.x
-                    ),
-
-                  y:
-                    roundToThreeDecimals(
-                      targetPosition.y
-                    )
-                }
-              : piece
-        )
-    );
-
-    return;
-  }
-
-  const deltaX =
-    targetPosition.x -
-    dragData.startPalletX;
-
-  const deltaY =
-    targetPosition.y -
-    dragData.startPalletY;
-
-  const movingIdSet =
-    new Set(
-      dragData.movingPieceIds
-    );
-
-  setPieces(
-    (currentPieces) =>
-      currentPieces.map(
-        (piece) => {
-          if (
-            !movingIdSet.has(
-              piece.id
-            )
-          ) {
-            return piece;
-          }
-
-          const initialPosition =
-            dragData.initialPositions.get(
-              piece.id
-            );
-
-          if (!initialPosition) {
-            return piece;
-          }
-
-         const movedPiece = {
-  ...piece,
-
-  x:
-    roundToThreeDecimals(
-      initialPosition.x +
-      deltaX
-    ),
-
-  y:
-    roundToThreeDecimals(
-      initialPosition.y +
-      deltaY
-    )
-};
-
-const snappedPiece =
-  applyMagneticSnap({
-    movingPiece:
-      movedPiece,
-
-    allPieces:
-      currentPieces,
-
-    excludedPieceIds:
-      dragData.movingPieceIds
-  });
-
-return {
-  ...snappedPiece,
-
-  x:
-    roundToThreeDecimals(
-      snappedPiece.x
-    ),
-
-  y:
-    roundToThreeDecimals(
-      snappedPiece.y
-    ),
-
-  z:
-    roundToThreeDecimals(
-      snappedPiece.z
-    )
-};
-
-        }
-      )
-  );
-}
-
-function finishPieceDrag() {
-  endPiecesTransaction();
-
-  groupDragRef.current = null;
-
-  setIsDragging(false);
-}
-
-function startRectangleSelection(
-  clientX,
-  clientY
-) {
-  cancelPieceReplication();
-
-  const nextRectangle = {
-    startX: clientX,
-    startY: clientY,
-    currentX: clientX,
-    currentY: clientY
-  };
-
-  selectionRectangleRef.current =
-    nextRectangle;
-
-  setSelectionRectangle(
-    nextRectangle
-  );
-
-  setIsDragging(true);
-}
-
-function handleCanvasPointerDown(
-  event
-) {
-  if (
-    activeConfigurator ===
-    "palletizing"
-  ) {
-    return;
-  }
-
-  const nativeEvent =
-    event.nativeEvent ??
-    event.sourceEvent ??
-    event;
-
-  /*
-    Si el pointerDown ha començat sobre una
-    peça o separador, DraggablePiece ja ha
-    gestionat la selecció.
-
-    El Canvas no ha de deseleccionar-la ni
-    començar un rectangle.
-  */
-  if (
-    nativeEvent.piecePointerHandled ===
-    true
-  ) {
-    return;
-  }
-
-  const shouldStartRectangle =
-  nativeEvent.ctrlKey ||
-  isRectangleSelectionArmed;
-
-if (!shouldStartRectangle) {
-  /*
-    No eliminem la selecció quan el
-    pointerDown comença al fons.
-
-    OrbitControls utilitza aquest mateix
-    esdeveniment per girar i desplaçar
-    la càmera.
-  */
-  return;
-}
-
-  nativeEvent.preventDefault();
-
-  setIsRectangleSelectionArmed(
-    false
-  );
-
-  startRectangleSelection(
-    nativeEvent.clientX,
-    nativeEvent.clientY
-  );
-}
-
-function handleCanvasDoubleClick(
-  event
-) {
-  if (
-    activeConfigurator ===
-    "palletizing"
-  ) {
-    return;
-  }
-
-  const nativeEvent =
-    event.nativeEvent ??
-    event.sourceEvent ??
-    event;
-
-  if (
-    nativeEvent.piecePointerHandled ===
-    true
-  ) {
-    return;
-  }
-
-  setIsRectangleSelectionArmed(
-    true
-  );
-}
-
-function startPieceReplication(
-  pieceId,
-  startThreeX,
-  startThreeZ
-) {
-  const sourcePiece =
-    pieces.find(
-      (piece) =>
-        piece.id === pieceId
-    );
-
-  if (
-    !sourcePiece ||
-    sourcePiece.pieceCategory ===
-      "SEPARATOR"
-  ) {
-    return;
-  }
-
-  updateReplicationPreview({
-    sourcePieceId: pieceId,
-    startThreeX,
-    startThreeZ,
-    currentThreeX:
-      startThreeX,
-    currentThreeZ:
-      startThreeZ,
-    candidates: []
-  });
-}
-
-function movePieceReplication(
-  currentThreeX,
-  currentThreeZ
-) {
-  const currentPreview =
-    replicationPreviewRef.current;
-
-  if (!currentPreview) {
-    return;
-  }
-
-  const sourcePiece =
-    pieces.find(
-      (piece) =>
-        piece.id ===
-        currentPreview.sourcePieceId
-    );
-
-  if (!sourcePiece) {
-    updateReplicationPreview(
-      null
-    );
-
-    return;
-  }
-
-  const rawCandidates =
-    buildReplicationCandidates({
-      sourcePiece,
-
-      startThreeX:
-        currentPreview.startThreeX,
-
-      startThreeZ:
-        currentPreview.startThreeZ,
-
-      currentThreeX,
-      currentThreeZ
-    });
-
-  const candidates =
-    rawCandidates.map(
-      (
-        candidate,
-        candidateIndex
-      ) => {
-        const collidesWithExistingPiece =
-          pieces.some(
-            (existingPiece) =>
-              isPieceCollidingWithPiece(
-                candidate.piece,
-                existingPiece
-              )
-          );
-
-        const collidesWithPreviewPiece =
-          rawCandidates.some(
-            (
-              otherCandidate,
-              otherIndex
-            ) =>
-              otherIndex !==
-                candidateIndex &&
-              isPieceCollidingWithPiece(
-                candidate.piece,
-                otherCandidate.piece
-              )
-          );
-
-        const collidesWithPallet =
-          isPieceCollidingWithPallet(
-            candidate.piece,
-            activePallet
-          );
-
-        return {
-          ...candidate,
-
-          colliding:
-            collidesWithExistingPiece ||
-            collidesWithPreviewPiece ||
-            collidesWithPallet
-        };
-      }
-    );
-
-  updateReplicationPreview({
-    ...currentPreview,
-    currentThreeX,
-    currentThreeZ,
-    candidates
-  });
-}
-
-function finishPieceReplication() {
-  const currentPreview =
-    replicationPreviewRef.current;
-
-  if (
-    !currentPreview ||
-    currentPreview.candidates.length ===
-      0
-  ) {
-    updateReplicationPreview(
-      null
-    );
-
-    return;
-  }
-
-  setPieces(
-    (currentPieces) => {
-      const numericIds =
-        currentPieces
-          .map(
-            (piece) =>
-              Number(piece.id)
-          )
-          .filter(
-            (pieceId) =>
-              Number.isFinite(
-                pieceId
-              )
-          );
-
-      let nextId =
-        numericIds.length === 0
-          ? 1
-          : Math.max(
-              ...numericIds
-            ) + 1;
-      let nextOrderId =
-        getNextOrderId(
-          currentPieces
-        );
-
-      const definitiveCopies =
-        currentPreview.candidates.map(
-          (candidate) => {
-      const definitivePiece = {
-        ...candidate.piece,
-
-        id:
-          nextId,
-
-        orderId:
-          nextOrderId
-      };
-
-            nextId += 1;
-            nextOrderId += 1;
-            return definitivePiece;
-          }
-        );
-
-      return [
-        ...currentPieces,
-        ...definitiveCopies
-      ];
-    }
-  );
-
-  updateReplicationPreview(
-    null
-  );
-}
-
-function cancelPieceReplication() {
-  updateReplicationPreview(
-    null
-  );
-}
-
-function clearPieceSelection() {
-  setSelectedPieceIds([]);
-  setSelectedPieceId(null);
-
-  setInputX("");
-  setInputY("");
-  setInputZ("");
-  setInputRX("");
-  setInputRY("");
-  setInputRZ("");
-}
-
-function applyPieceSelection(
-  pieceIds
-) {
-  const uniqueIds =
-    Array.from(
-      new Set(pieceIds)
-    );
-
-  setSelectedPieceIds(
-    uniqueIds
-  );
-
-  setSelectedPieceId(
-    uniqueIds.length === 1
-      ? uniqueIds[0]
-      : null
-  );
-}
-
-function selectPiece(
-  pieceId,
-  additive = false
-) {
-  if (!additive) {
-    applyPieceSelection([
-      pieceId
-    ]);
-
-    return;
-  }
-
-  setSelectedPieceIds(
-    (currentIds) => {
-      const alreadySelected =
-        currentIds.includes(
-          pieceId
-        );
-
-      const nextIds =
-        alreadySelected
-          ? currentIds.filter(
-              (currentId) =>
-                currentId !==
-                pieceId
-            )
-          : [
-              ...currentIds,
-              pieceId
-            ];
-
-      setSelectedPieceId(
-        nextIds.length === 1
-          ? nextIds[0]
-          : null
-      );
-
-      return nextIds;
-    }
-  );
-}
-
-function startPieceDrag(
-  pieceId,
-  startThreeX,
-  startThreeZ
-) {
-  beginPiecesTransaction();
-
-  const sourcePiece =
-    pieces.find(
-      (piece) =>
-        piece.id === pieceId
-    );
-
-  if (!sourcePiece) {
-    endPiecesTransaction();
-    return;
-}
-
-  const movingPieceIds =
-    selectedPieceIds.includes(
-      pieceId
-    )
-      ? selectedPieceIds
-      : [
-          pieceId
-        ];
-
-  if (
-    !selectedPieceIds.includes(
-      pieceId
-    )
-  ) {
-    applyPieceSelection([
-      pieceId
-    ]);
-  }
-
-  const initialPositions =
-    new Map(
-      pieces
-        .filter(
-          (piece) =>
-            movingPieceIds.includes(
-              piece.id
-            )
-        )
-        .map(
-          (piece) => [
-            piece.id,
-            {
-              x:
-                Number(piece.x) ||
-                0,
-              y:
-                Number(piece.y) ||
-                0
-            }
-          ]
-        )
-    );
-
-  const startPalletPosition =
-    threeToPallet(
-      startThreeX,
-      0,
-      startThreeZ
-    );
-
-  groupDragRef.current = {
-    sourcePieceId:
-      pieceId,
-
-    movingPieceIds,
-
-    initialPositions,
-
-    startPalletX:
-      startPalletPosition.x,
-
-    startPalletY:
-      startPalletPosition.y
-  };
-
-  setIsDragging(true);
-}
-
-
-
-
-// Crea una peça nova al centre del palet
-
-
-
-function openNewPieceDialog() {
-  setIsNewPieceDialogOpen(
-    true
-  );
-}
-
-
-
-
-
-function applyGripper(
-  gripperDefinition
-) {
-  setActiveGripper({
-    ...gripperDefinition
-  });
-
-  setIsGripperVisible(
-    true
-  );
-}
-
-function openSeparatorDialog() {
-  setIsSeparatorDialogOpen(true);
-}
-
-function selectConfigurator(
-  configuratorName
-) {
-  cancelPieceReplication();
-
-  selectionRectangleRef.current =
-    null;
-
-  setSelectionRectangle(
-    null
-  );
-
-  setIsRectangleSelectionArmed(
-    false
-  );
-
-  setActiveConfigurator(
-    configuratorName
-  );
-
-  if (
-    configuratorName !==
-    "palletizing"
-  ) {
-    setSelectedPalletizingInstanceId(
-      null
-    );
-  }
-}
-
-function handleConfiguratorSelection(
-  configuratorName
-) {
-  if (
-    configuratorName ===
-    "gripper"
-  ) {
-    selectConfigurator(
-      "gripper"
-    );
-
-    return;
-  }
-
-  if (
-    configuratorName ===
-    "pallet"
-  ) {
-    setActiveConfigurator(
-      "pallet"
-    );
-
-    setIsPalletDialogOpen(
-      true
-    );
-
-    return;
-  }
-
-  selectConfigurator(
-    configuratorName
-  );
-}
-
-
-function applyEmptyLayer() {
-  suppressNextChangeDetection.current =
-    true;
-
-  setPieces([]);
-
-  clearPieceSelection();
-
-  setActiveLayerId(null);
-  setLayerName("");
-
-  setPendingLayerId(null);
-
-  setIsPendingNewLayer(
-    false
-  );
-
-  setIsUnsavedLayerDialogOpen(
-    false
-  );
-}
-
-function requestNewEmptyLayer() {
-  if (isCurrentLayerDirty) {
-    setPendingLayerId(null);
-
-    setIsPendingNewLayer(
-      true
-    );
-
-    setIsUnsavedLayerDialogOpen(
-      true
-    );
-
-    return;
-  }
-
-  applyEmptyLayer();
-}
-
-function updateReplicationPreview(
-  nextPreview
-) {
-  replicationPreviewRef.current =
-    nextPreview;
-
-  setReplicationPreview(
-    nextPreview
-  );
-}
-
-function updateGenericGripperOffset(
-  offsetType,
-  axis,
-  value
-) {
-  const numericValue = Number(value);
-
-  setCurrentLayerGripperOffsets(
-    (currentOffsets) => ({
-      ...currentOffsets,
-      [offsetType]: {
-        ...currentOffsets[offsetType],
-        [axis]: Number.isFinite(numericValue)
-          ? numericValue
-          : 0
-      }
-    })
-  );
-}
-
-function updatePieceGripperOffset(
-  pieceId,
-  offsetType,
-  axis,
-  value
-) {
-  const numericValue = Number(value);
-
-  setPieces((currentPieces) =>
-    currentPieces.map((piece) => {
-      if (piece.id !== pieceId) {
-        return piece;
-      }
-
-      const baseOffsets =
-        piece.gripperOffsets ??
-        currentLayerGripperOffsets;
-
-      return {
-        ...piece,
-        gripperOffsets: {
-          approach: {
-            ...baseOffsets.approach
-          },
-          retreat: {
-            ...baseOffsets.retreat
-          },
-          [offsetType]: {
-            ...baseOffsets[offsetType],
-            [axis]: Number.isFinite(numericValue)
-              ? numericValue
-              : 0
-          }
-        }
-      };
-    })
-  );
-}
-
-function clearPieceGripperOffsets(
-  pieceId
-) {
-  setPieces((currentPieces) =>
-    currentPieces.map((piece) =>
-      piece.id === pieceId
-        ? {
-            ...piece,
-            gripperOffsets: null
-          }
-        : piece
-    )
-  );
-}
-
-function changeGripperOffsetPreviewMode(
-  nextMode
-) {
-  setGripperOffsetPreviewMode(
-    nextMode
-  );
-
-  if (nextMode) {
-    setIsGripperVisible(true);
-  }
-}
-
-function updatePieceOrderId(
-  pieceId,
-  value
-) {
-  setPieces(
-    (currentPieces) =>
-      currentPieces.map(
-        (piece) =>
-          piece.id === pieceId
-            ? {
-                ...piece,
-                orderId:
-                  value
-              }
-            : piece
-      )
-  );
-}
-
-function applySavedLayer(
-  layerId
-) {
-  const layerToApply =
-    layers.find(
-      (layer) =>
-        layer.id === layerId
-    );
-
-  if (!layerToApply) {
-    return;
-  }
-
-  suppressNextChangeDetection.current =
-    true;
-
-  setPieces(
-  ensureOrderIds(
-    layerToApply.pieces
-  )
-);
-
-  clearPieceSelection();
-
-  setActiveLayerId(
-    layerToApply.id
-  );
-
-  setLayerName(
-    layerToApply.name
-  );
-
-  setCurrentLayerGripperOffsets(
-    layerToApply.gripperOffsets
-      ? {
-          approach: {
-            ...layerToApply.gripperOffsets.approach
-          },
-          retreat: {
-            ...layerToApply.gripperOffsets.retreat
-          }
-        }
-      : {
-          approach: { x: 0, y: 0, z: 0 },
-          retreat: { x: 0, y: 0, z: 0 }
-        }
-  );
-
-  setGripperOffsetPreviewMode(null);
-
-setShowOrderIds(
-  false
-);
-}
-
-
-
-
-
-
-
-
-
-
-function saveCurrentLayer(
-  forcedName = null
-) {
-
-const validation =
-  getOrderIdValidation(
-    pieces
-  );
-
-if (!validation.isValid) {
-  setOrderIdErrorDialog({
-    open: true,
-
-    message:
-      createOrderIdErrorMessage(
-        validation
-      )
-  });
-
-  setShowOrderIds(
-    true
-  );
-
-  return null;
-}
-
-
-  const nameToUse =
-    typeof forcedName === "string"
-      ? forcedName
-      : layerName;
-
-  const cleanName =
-    nameToUse.trim();
-
-  const finalName =
-    cleanName ||
-    activeLayer?.name ||
-    t.layer.defaultName(layers.length + 1);
-
-  const normalizedFinalName =
-    finalName.toLowerCase();
-
-  const currentDate =
-    new Date().toISOString();
-
-  /*
-    Comprovem si el nom escrit és exactament
-    el mateix que el de la capa activa.
-  */
-  const isUpdatingActiveLayer =
-    Boolean(
-      activeLayer &&
-      activeLayer.name
-        .toLowerCase() ===
-        normalizedFinalName
-    );
-
-  /*
-    També comprovem si existeix una altra
-    capa guardada amb aquest mateix nom.
-  */
-  const existingLayerByName =
-    layers.find(
-      (layer) =>
-        layer.name
-          .toLowerCase() ===
-        normalizedFinalName
-    );
-
-  /*
-    Decidim quin ID s'ha d'utilitzar:
-
-    1. Mateix nom que la capa activa:
-       actualitzem la capa activa.
-
-    2. Nom d'una altra capa existent:
-       actualitzem aquella capa.
-
-    3. Nom completament nou:
-       creem un ID nou.
-  */
-  const layerIdToUse =
-    isUpdatingActiveLayer
-      ? activeLayer.id
-      : existingLayerByName?.id ??
-        createLayerId();
-
-  const existingLayer =
-    layers.find(
-      (layer) =>
-        layer.id ===
-        layerIdToUse
-    );
-
-const normalizedPieces =
-  pieces.map(
-    (piece) => ({
-      ...piece,
-
-      orderId:
-        Number(
-          piece.orderId
-        )
-    })
-  );
-
-
-
-  const layerToSave = {
-    id: layerIdToUse,
-    name: finalName,
-
-    createdAt:
-      existingLayer?.createdAt ??
-      currentDate,
-
-    updatedAt:
-      currentDate,
-
-    pieces:
-  cloneLayerPieces(
-    normalizedPieces
-  )
-  };
-
-  setLayers(
-    (currentLayers) => {
-      const layerExists =
-        currentLayers.some(
-          (layer) =>
-            layer.id ===
-            layerToSave.id
-        );
-
-      if (layerExists) {
-        return currentLayers.map(
-          (layer) =>
-            layer.id ===
-            layerToSave.id
-              ? layerToSave
-              : layer
-        );
-      }
-
-      return [
-        ...currentLayers,
-        layerToSave
-      ];
-    }
-  );
-
-  setActiveLayerId(
-    layerToSave.id
-  );
-
-  setLayerName(
-    layerToSave.name
-  );
-
-  setHasUnsavedChanges(true);
-
-  return layerToSave;
-}
-
-function requestLayerSelection(
-  layerId
-) {
-  if (
-    layerId === activeLayerId
-  ) {
-    return;
-  }
-
-  if (isCurrentLayerDirty) {
-    setPendingLayerId(
-      layerId
-    );
-
-    setIsPendingNewLayer(
-      false
-    );
-
-    setIsUnsavedLayerDialogOpen(
-      true
-    );
-
-    return;
-  }
-
-  applySavedLayer(
-    layerId
-  );
-}
-
-function savePendingLayerChanges() {
-  const savedLayer =
-    saveCurrentLayer();
-
-  if (!savedLayer) {
-    return;
-  }
-
-  const nextLayerId =
-    pendingLayerId;
-
-  const shouldCreateEmptyLayer =
-    isPendingNewLayer;
-
-  setPendingLayerId(null);
-
-  setIsPendingNewLayer(
-    false
-  );
-
-  setIsUnsavedLayerDialogOpen(
-    false
-  );
-
-  if (shouldCreateEmptyLayer) {
-    applyEmptyLayer();
-    return;
-  }
-
-  if (nextLayerId) {
-    applySavedLayer(
-      nextLayerId
-    );
-  }
-}
-
-function discardPendingLayerChanges() {
-  const nextLayerId =
-    pendingLayerId;
-
-  const shouldCreateEmptyLayer =
-    isPendingNewLayer;
-
-  setPendingLayerId(null);
-
-  setIsPendingNewLayer(
-    false
-  );
-
-  setIsUnsavedLayerDialogOpen(
-    false
-  );
-
-  if (shouldCreateEmptyLayer) {
-    applyEmptyLayer();
-    return;
-  }
-
-  if (nextLayerId) {
-    applySavedLayer(
-      nextLayerId
-    );
-  }
-}
-
-function requestDeleteSavedLayer(
-  layerId
-) {
-  const layerToDelete =
-    layers.find(
-      (layer) =>
-        layer.id === layerId
-    );
-
-  if (!layerToDelete) {
-    return;
-  }
-
-  openConfirmDialog({
-    title: t.layer.deleteTitle,
-
-    message:
-      t.layer.deleteQuestion(layerToDelete.name),
-
-    confirmLabel: t.common.yes,
-    cancelLabel: t.common.no,
-    destructive: true,
-
-    onConfirm: () => {
-      deleteSavedLayer(
-        layerId
-      );
-    }
-  });
-}
-
-function deleteSavedLayer(
-  layerId
-) {
-  const deletingActiveLayer =
-    activeLayerId === layerId;
-
-  setLayers(
-    (currentLayers) =>
-      currentLayers.filter(
-        (layer) =>
-          layer.id !== layerId
-      )
-  );
-
-  setPalletizingSequence(
-  (currentSequence) =>
-    currentSequence.filter(
-      (item) =>
-        item.sourceLayerId !==
-        layerId
-    )
-);
-
-  if (deletingActiveLayer) {
-    setActiveLayerId(null);
-    setLayerName("");
-  }
-
-  setHasUnsavedChanges(true);
-}
-
-
-
-function cancelPendingLayerSelection() {
-  setPendingLayerId(null);
-
-  setIsPendingNewLayer(
-    false
-  );
-
-  setIsUnsavedLayerDialogOpen(
-    false
-  );
-}
-
-
-function addLayerToPalletizing(
-  sourceLayerId
-) {
-  const sourceLayerExists =
-    layers.some(
-      (layer) =>
-        layer.id ===
-        sourceLayerId
-    );
-
-  if (!sourceLayerExists) {
-    return;
-  }
-
-  const newInstance = {
-    instanceId:
-      createPalletizingInstanceId(),
-
-    sourceLayerId
-  };
-
-  setPalletizingSequence(
-    (currentSequence) => [
-      ...currentSequence,
-      newInstance
-    ]
-  );
-
-  setSelectedPalletizingInstanceId(
-    newInstance.instanceId
-  );
-
-  setHasUnsavedChanges(true);
-}
-
-function deletePalletizingLayer(
-  instanceId
-) {
-  setPalletizingSequence(
-    (currentSequence) =>
-      currentSequence.filter(
-        (item) =>
-          item.instanceId !==
-          instanceId
-      )
-  );
-
-  setSelectedPalletizingInstanceId(
-    (currentSelectedId) =>
-      currentSelectedId ===
-      instanceId
-        ? null
-        : currentSelectedId
-  );
-
-  setHasUnsavedChanges(true);
-}
-
-
-
-function buildCurrentProject({
-  id,
-  name,
-  createdAt
-}) {
-  const currentDate =
-    new Date().toISOString();
-
-  return {
-    id,
-    name,
-
-    createdAt:
-      createdAt ??
-      currentDate,
-
-    updatedAt:
-      currentDate,
-
-    activePallet: {
-      ...activePallet
     },
-
-    activeGripper:
-      activeGripper
-        ? {
-      ...activeGripper
-    }
-: null,
-
-    pieces:
-      pieces.map(
-        (piece) => ({
-          ...piece
-        })
-      ),
-
-      layers:
-  layers.map(
-    (layer) => ({
-      ...layer,
-
-      pieces:
-        cloneLayerPieces(
-          layer.pieces
-        )
-    })
-  ),
-
-activeLayerId,
-
-palletizingSequence:
-palletizingSequence.map(
-(item) => ({
-...item
-})
-),
-    selectedPieceId
-  };
-}
-
-
-function saveCurrentProjectAs() {
-if (isSavingProjectRef.current) {
-return;
-}
- 
-const suggestedName =
-activeProject.id
-? `${activeProject.name} ${t.project.copySuffix}`
-: activeProject.name ===
-t.project.unnamed
-? ""
-: activeProject.name;
- 
-setSaveProjectSuggestedName(
-suggestedName
-);
- 
-setIsSaveProjectDialogOpen(
-true
-);
-}
-
-function confirmSaveCurrentProjectAs(
-projectName
-) {
-if (isSavingProjectRef.current) {
-return;
-}
-
-const cleanProjectName =
-String(
-projectName ?? ""
-).trim();
-
-if (!cleanProjectName) {
-window.alert(
-t.project.saveNameRequired
-);
-
-return;
-}
-
-isSavingProjectRef.current =
-true;
-
-/*
-Tanquem el popup immediatament.
- 
-Això evita que l'usuari pugui prémer
-diverses vegades el botó de guardat.
-*/
-setIsSaveProjectDialogOpen(
-false
-);
-
-try {
-const newProjectId =
-createProjectId();
-
-const projectToSave =
-buildCurrentProject({
-id:
-newProjectId,
-
-name:
-cleanProjectName,
-
-createdAt:
-null
-});
-
-const savedProject =
-saveProject(
-projectToSave
-);
-
-if (!savedProject) {
-window.alert(
-t.project.saveError
-);
-
-setIsSaveProjectDialogOpen(
-true
-);
-
-return;
-}
-
-suppressNextChangeDetection.current =
-true;
-
-setActiveProject({
-id:
-savedProject.id,
-
-name:
-savedProject.name,
-
-createdAt:
-savedProject.createdAt
-});
-
-setHasUnsavedChanges(
-false
-);
-
-clearAutosave();
-
-} catch (error) {
-console.error(
-"Error guardant el projecte:",
-error
-);
-
-window.alert(
-t.project.saveError
-);
-
-setIsSaveProjectDialogOpen(
-true
-);
-} finally {
-isSavingProjectRef.current =
-false;
-}
-}
-
-
-
-
-function saveCurrentProject() {
-if (isSavingProjectRef.current) {
-return;
-}
-
-/*
-Només obrim Guardar com a si el projecte
-encara no ha estat guardat mai.
-*/
-if (
-activeProject.id === null ||
-activeProject.id === undefined ||
-activeProject.id === ""
-) {
-saveCurrentProjectAs();
-
-return;
-}
-
-isSavingProjectRef.current =
-true;
-
-try {
-const projectToSave =
-buildCurrentProject({
-id:
-activeProject.id,
-
-name:
-activeProject.name,
-
-createdAt:
-activeProject.createdAt
-});
-
-const savedProject =
-saveProject(
-projectToSave
-);
-
-if (!savedProject) {
-window.alert(
-t.project.saveError
-);
-
-return;
-}
-
-suppressNextChangeDetection.current =
-true;
-
-setActiveProject({
-id:
-savedProject.id,
-
-name:
-savedProject.name,
-
-createdAt:
-savedProject.createdAt
-});
-
-setHasUnsavedChanges(
-false
-);
-
-clearAutosave();
-
-} catch (error) {
-console.error(
-"Error actualitzant el projecte:",
-error
-);
-
-window.alert(
-t.project.saveError
-);
-} finally {
-isSavingProjectRef.current =
-false;
-}
-}
-
-
-function createNewProject() {
-  if (!hasUnsavedChanges) {
-    resetToNewProject();
-    return;
-  }
-
-  openConfirmDialog({
-    title:
-  t.project.newTitle,
-    message:
-      t.project.newDiscardMessage,
-    confirmLabel:
-      t.project.discardAndContinue,
-    destructive: true,
-    onConfirm:
-      resetToNewProject
-  });
-}
-
-
-
-
-
-function resetToNewProject() {
- 
-  suppressNextChangeDetection.current =
-  true;
-
-  cancelPieceReplication();
-
-  resetPiecesHistory([]);
-
-  setLayers([]);
-  setActiveLayerId(null);
-
-  setPalletizingSequence([]);
-
-  setSelectedPalletizingInstanceId(
-    null
-  );
-  setLayerName("");
-  setPendingLayerId(null);
-  setIsPendingNewLayer(
-    false
-  );
-
-  setIsUnsavedLayerDialogOpen(
-    false
-  );
-
-  setActivePallet({
-    ...PALLET_CONFIG
-  });
-  setActiveGripper(null);
-  setSelectedPieceId(null);
-
-  setInputX("");
-  setInputY("");
-  setInputZ("");
-  setInputRX("");
-  setInputRY("");
-  setInputRZ("");
-
-  setActiveProject({
-    id: null,
-    name: t.project.unnamed,
-    createdAt: null
+    t
   });
 
-  setHasUnsavedChanges(false);
-
-clearAutosave();
-
-
-}
-
-
-
-
-
-
-
-
-
-function showOpenProjectDialog() {
-  setIsOpenProjectDialogOpen(
-    true
-  );
-}
-
-function openProjectDialog() {
-  if (!hasUnsavedChanges) {
-    showOpenProjectDialog();
-    return;
-  }
-
-  openConfirmDialog({
-    title: t.project.openTitle,
-    message: t.project.openDiscardMessage,
-    confirmLabel:
-      t.project.discardAndOpen,
-    destructive: true,
-    onConfirm:
-      showOpenProjectDialog
-  });
-}
-
-
-
-
-function applyOpenedProject(
-  project
-) {
-  suppressNextChangeDetection.current =
-  true;
-
-  cancelPieceReplication();
-
-  const projectPieces =
-  ensureOrderIds(
-    project.pieces
-  );
-
-
-  const projectLayers =
-  Array.isArray(
-    project.layers
-  )
-    ? project.layers.map(
-        (layer) => ({
-          ...layer,
-
-          pieces:
-  ensureOrderIds(
-    layer.pieces
-  )
-        })
+  /*
+    Agafades múltiples de la composició i el seu estat
+    (pose de la pinça i motius per revisar-les).
+  */
+  const graspGroupStatuses = getOperations(pieces)
+    .filter((operation) => operation.groupId !== null)
+    .map((operation) => ({
+      groupId: operation.groupId,
+      orderId: getOperationOrderId(operation),
+      memberIds: operation.pieces.map((piece) => piece.id),
+      ...evaluateGrasp(
+        operation.pieces,
+        operation.lead,
+        activeGripper,
+        operation.lead.graspAdjust
       )
-    : [];
+    }));
 
-    const restoredPalletizingSequence =
-  Array.isArray(
-    project.palletizingSequence
-  )
-    ? project.palletizingSequence
-        .filter(
-          (item) =>
-            projectLayers.some(
-              (layer) =>
-                layer.id ===
-                item.sourceLayerId
-            )
-        )
-        .map(
-          (item) => ({
-            ...item
-          })
-        )
-    : [];
+  const palletizing = usePalletizing({ projectDocument });
 
-  const nextSelectedPieceId =
-    projectPieces.some(
-      (piece) =>
-        piece.id ===
-        project.selectedPieceId
-    )
-      ? project.selectedPieceId
+  const projectFile = useProjectFile({
+    projectDocument,
+    selectedPieceId,
+    applyPieceSelection,
+    clearPieceSelection,
+    cancelPieceReplication: replication.cancelPieceReplication,
+    cancelPendingLayerSelection:
+      layerEditor.cancelPendingLayerSelection,
+    commitCurrentLayer: layerEditor.commitCurrentLayer,
+    openConfirmDialog,
+    t
+  });
+
+  const autosave = useAutosave({
+    projectDocument,
+    selectedPieceId,
+    onRecover: projectFile.applyRecoveredAutosave,
+    t
+  });
+
+  useKeyboardShortcuts({
+    activeConfigurator,
+    pieces,
+    setPieces,
+    undoPieces: projectDocument.undoPieces,
+    redoPieces: projectDocument.redoPieces,
+    selectedPieceIds,
+    applyPieceSelection,
+    clearPieceSelection,
+    deleteSelectedPieces: pieceActions.deleteSelectedPieces,
+    selectedPalletizingInstanceId,
+    setSelectedPalletizingInstanceId,
+    deletePalletizingLayer: palletizing.deletePalletizingLayer,
+    hasActiveSelectionRectangle:
+      rectangle.hasActiveSelectionRectangle,
+    cancelSelectionRectangle: rectangle.cancelSelectionRectangle,
+    isSimulating: simulation.isSimulating,
+    stopSimulation: simulation.stopSimulation,
+    isDefiningOrderIds: layerEditor.isDefiningOrderIds,
+    stopDefiningOrderIds: layerEditor.stopDefiningOrderIds
+  });
+
+  function selectConfigurator(configuratorName) {
+    replication.cancelPieceReplication();
+    rectangle.resetSelectionRectangle();
+    layerEditor.stopDefiningOrderIds();
+    graspEditor.stopDefiningGrasps();
+    // La pinça torna a la posició final de la peça
+    gripperOffsets.resetGripperOffsetPreview();
+
+    setActiveConfigurator(configuratorName);
+
+    if (configuratorName !== "palletizing") {
+      setSelectedPalletizingInstanceId(null);
+    }
+  }
+
+  function handleConfiguratorSelection(configuratorName) {
+    // El palet es configura des d'un diàleg
+    if (configuratorName === "pallet") {
+      setActiveConfigurator("pallet");
+      setIsPalletDialogOpen(true);
+      return;
+    }
+
+    selectConfigurator(configuratorName);
+  }
+
+  // Canviar de sentit atura qualsevol simulació en curs
+  function changeOperationMode(nextMode) {
+    simulation.stopSimulation();
+    projectDocument.setOperationMode(nextMode);
+  }
+
+  function toggleDefiningOrderIds() {
+    simulation.stopSimulation();
+    graspEditor.stopDefiningGrasps();
+    layerEditor.toggleDefiningOrderIds();
+  }
+
+  /*
+    Normalment, clicar una peça la selecciona i permet
+    arrossegar-la. Mentre es defineixen els ID, el clic
+    només li assigna el número següent.
+  */
+  const pieceHandlers = graspEditor.isDefiningGrasps
+    ? {
+        // "Definir agafades": el clic tria o treu peces de l'agafada
+        selectPiece: noop,
+        movePiece: noop,
+        startPieceDrag: (pieceId) => graspEditor.clickGraspPiece(pieceId),
+        finishPieceDrag: noop,
+        startPieceReplication: noop,
+        movePieceReplication: noop,
+        finishPieceReplication: noop,
+        cancelPieceReplication: noop
+      }
+    : layerEditor.isDefiningOrderIds
+    ? {
+        selectPiece: noop,
+        movePiece: noop,
+        startPieceDrag: (pieceId) =>
+          layerEditor.assignNextOrderId(pieceId),
+        finishPieceDrag: noop,
+        startPieceReplication: noop,
+        movePieceReplication: noop,
+        finishPieceReplication: noop,
+        cancelPieceReplication: noop
+      }
+    : {
+        selectPiece: selectPieceOrGrasp,
+        ...drag,
+        startPieceReplication: replication.startPieceReplication,
+        movePieceReplication: replication.movePieceReplication,
+        finishPieceReplication: replication.finishPieceReplication,
+        cancelPieceReplication: replication.cancelPieceReplication
+      };
+
+  function createPieceFromDialog(pieceDefinition) {
+    // Si la plantilla té agafada configurada a la cinta, la peça neix amb aquest TCP
+    const grasp = pieceDefinition.libraryPieceId
+      ? conveyor.getGraspForLibraryPiece(pieceDefinition.libraryPieceId)
       : null;
 
-  resetPiecesHistory(
-  projectPieces
-);
-
-
-  setLayers(
-  projectLayers
-);
-
-setPalletizingSequence(
-  restoredPalletizingSequence
-);
-
-setSelectedPalletizingInstanceId(
-  null
-);
-
-const restoredActiveLayer =
-  projectLayers.find(
-    (layer) =>
-      layer.id ===
-      project.activeLayerId
-  ) ?? null;
-
-setActiveLayerId(
-  restoredActiveLayer?.id ??
-  null
-);
-
-setLayerName(
-  restoredActiveLayer?.name ??
-  ""
-);
-
-  setActivePallet(
-    project.activePallet
-      ? {
-          ...project.activePallet
-        }
-      : {
-          ...PALLET_CONFIG
-        }
-  );
-
-setActiveGripper(
-  project.activeGripper
-    ? {
-        ...project.activeGripper
-      }
-    : null
-);
-
-  if (
-  nextSelectedPieceId !==
-  null
-) {
-  applyPieceSelection([
-    nextSelectedPieceId
-  ]);
-} else {
-  clearPieceSelection();
-}
-
-
-  setActiveProject({
-    id: project.id,
-    name: project.name,
-    createdAt:
-      project.createdAt ??
-      null
-  });
-
-  setHasUnsavedChanges(false);
-
- clearAutosave();
-
-  setIsOpenProjectDialogOpen(
-    false
-  );
-}
-
-
-
-function applyPallet(
-  palletDefinition
-) {
-  setActivePallet({
-    ...palletDefinition
-  });
-}
-
-
-function createPieceFromDialog(
-  pieceDefinition
-) {
-  const newId =
-    pieces.length === 0
-      ? 1
-      : Math.max(
-          ...pieces.map(
-            (piece) => piece.id
-          )
-        ) + 1;
-
-const newOrderId =
-  getNextOrderId(
-    pieces
-  );
-
-console.log(
-  "GEOMETRIA IMPORTADA:",
-  {
-    name:
-      pieceDefinition.name,
-
-    bottomFace:
-      pieceDefinition.modelBottomFace,
-
-    hasCollisionGeometry:
-      Boolean(
-        pieceDefinition
-          .collisionGeometry
-      ),
-
-    vertices:
-      pieceDefinition
-        .collisionGeometry
-        ?.vertices
-        ?.length ??
-      0,
-
-    triangles:
-      pieceDefinition
-        .collisionGeometry
-        ?.triangles
-        ?.length ??
-      0,
-
-    edges:
-      pieceDefinition
-        .collisionGeometry
-        ?.edges
-        ?.length ??
-      0,
-
-    faces:
-      pieceDefinition
-        .collisionGeometry
-        ?.faces
-        ?.length ??
-      0
-  }
-);
-
-const importedVertices =
-  pieceDefinition
-    .collisionGeometry
-    ?.vertices ??
-  [];
-
-console.table(
-  importedVertices.map(
-    (vertex, index) => ({
-      index,
-
-      x:
-        Number(
-          vertex.x
-        ).toFixed(3),
-
-      y:
-        Number(
-          vertex.y
-        ).toFixed(3),
-
-      z:
-        Number(
-          vertex.z
-        ).toFixed(3)
-    })
-  )
-);
-
-if (
-  importedVertices.length > 0
-) {
-  const xValues =
-    importedVertices.map(
-      (vertex) =>
-        Number(vertex.x)
-    );
-
-  const yValues =
-    importedVertices.map(
-      (vertex) =>
-        Number(vertex.y)
-    );
-
-  const zValues =
-    importedVertices.map(
-      (vertex) =>
-        Number(vertex.z)
-    );
-
-  console.log(
-    "LÍMITS DEL HULL:",
-    {
-      minX:
-        Math.min(...xValues),
-
-      maxX:
-        Math.max(...xValues),
-
-      minY:
-        Math.min(...yValues),
-
-      maxY:
-        Math.max(...yValues),
-
-      minZ:
-        Math.min(...zValues),
-
-      maxZ:
-        Math.max(...zValues)
-    }
-  );
-}
-
-  const newPiece = {
-    id: newId,
-    orderId: newOrderId,
-    /*
-      Guardem el nom també dins de la
-      peça creada.
-
-      Això permetrà mostrar-lo o
-      exportar-lo més endavant.
-    */
-    name:
-      pieceDefinition.name ||
-      `Peça ${newId}`,
-
-    pieceType:
-      pieceDefinition.pieceType,
-
-      modelId:
-  pieceDefinition.modelId ??
-  null,
-
-modelName:
-  pieceDefinition.modelName ??
-  null,
-
-modelFormat:
-  pieceDefinition.modelFormat ??
-  null,
-
-modelUnit:
-  pieceDefinition.modelUnit ??
-  null,
-
-  modelUnit:
-  pieceDefinition.modelUnit ??
-  null,
-
-modelBottomFace:
-  pieceDefinition.modelBottomFace ??
-  "NEGATIVE_Y",
-
-collisionGeometry:
-  pieceDefinition.collisionGeometry ??
-  null,
-
-
-
-
-
-    width:
-      pieceDefinition.width,
-
-    height:
-      pieceDefinition.height,
-
-    depth:
-      pieceDefinition.depth,
-
-    topWidth:
-      pieceDefinition.topWidth,
-
-    topDepth:
-      pieceDefinition.topDepth,
-
-    referencePoint: "CENTER",
-
-    faceOffsetX: 0,
-    faceOffsetY: 0,
-    faceRotationDeg: 0,
-
-    x: 0,
-    y: 0,
-
-    /*
-      Conservem el mateix criteri
-      que utilitzava addPiece().
-    */
-    z:
-      roundToThreeDecimals(
-        Number(
-          pieceDefinition.height
-        ) / 2
-      ),
-
-    rxDeg: 0,
-    ryDeg: 0,
-    rzDeg: 0
-  };
-
-  setPieces(
-    (currentPieces) => [
-      ...currentPieces,
-      newPiece
-    ]
-  );
-
-  applyPieceSelection([
-  newId
-]);
-
-  setIsNewPieceDialogOpen(
-    false
-  );
-}
-
-function createSeparatorFromDialog(
-  separatorDefinition
-) {
-  const newId =
-    pieces.length === 0
-      ? 1
-      : Math.max(
-          ...pieces.map(
-            (piece) => piece.id
-          )
-        ) + 1;
-
-const newOrderId =
-  getNextOrderId(
-    pieces
-  );
-
-
-  const newSeparator = {
-    id: newId,
-    orderId: newOrderId,
-    name:
-      separatorDefinition.name ||
-      `Separador ${newId}`,
-
-    pieceCategory: "SEPARATOR",
-    pieceType: "RECTANGULAR",
-
-    width:
-      separatorDefinition.width,
-
-    height:
-      separatorDefinition.height,
-
-    depth:
-      separatorDefinition.depth,
-
-    topWidth:
-      separatorDefinition.width,
-
-    topDepth:
-      separatorDefinition.depth,
-
-    color:
-      separatorDefinition.color ||
-      "#d4b483",
-
-    modelType:
-      separatorDefinition.modelType ||
-      "BOX",
-
-    modelData:
-      separatorDefinition.modelData ||
-      null,
-
-    referencePoint: "TOP_CENTER",
-
-    faceOffsetX: 0,
-    faceOffsetY: 0,
-    faceRotationDeg: 0,
-
-    x: 0,
-    y: 0,
-
-    z:
-      roundToThreeDecimals(
-        Number(
-          separatorDefinition.height
-        ) / 2
-      ),
-
-    rxDeg: 0,
-    ryDeg: 0,
-    rzDeg: 0
-  };
-
-  setPieces(
-    (currentPieces) => [
-      ...currentPieces,
-      newSeparator
-    ]
-  );
-
-  applyPieceSelection([
-  newId
-]);
-
-  setActiveConfigurator(
-    "separators"
-  );
-
-  setIsSeparatorDialogOpen(
-    false
-  );
-}
-
-
-// Duplica la peça seleccionada
-function duplicatePiece() {
-  if (!selectedData) {
-    return;
+    pieceActions.createPiece({ ...pieceDefinition, ...grasp });
+    setIsNewPieceDialogOpen(false);
   }
 
-  const newId =
-    pieces.length === 0
-      ? 1
-      : Math.max(
-          ...pieces.map(
-            (piece) =>
-              Number(piece.id)
-          )
-        ) + 1;
-
-  const newOrderId =
-    getNextOrderId(
-      pieces
-    );
-
-  const duplicatedPiece = {
-    ...selectedData,
-
-    id:
-      newId,
-
-    orderId:
-      newOrderId,
-
-    x:
-      roundToThreeDecimals(
-        Number(selectedData.x) +
-        100
-      ),
-
-    y:
-      roundToThreeDecimals(
-        Number(selectedData.y)
-      ),
-
-    z:
-      roundToThreeDecimals(
-        Number(selectedData.z)
-      )
-  };
-
-  setPieces(
-    (currentPieces) => [
-      ...currentPieces,
-      duplicatedPiece
-    ]
-  );
-
-  applyPieceSelection([
-    newId
-  ]);
-}
-
-// Elimina la peça seleccionada
-function deleteSelectedPieces() {
-  if (
-    selectedPieceIds.length ===
-      0
-  ) {
-    return;
-  }
-
-  const selectedIdSet =
-    new Set(
-      selectedPieceIds
-    );
-
-  setPieces(
-    (currentPieces) => {
-      
-
-      const remainingPieces =
-        currentPieces.filter(
-          (piece) =>
-            !selectedIdSet.has(
-              piece.id
-            )
-        );
-
-      return normalizeOrderIdsAfterDeletion(
-  remainingPieces
-);
-    }
-  );
-
-  clearPieceSelection();
-}
-
-
-function moveSelectedPieces(
-  deltaX,
-  deltaY
-) {
-  const moveX =
-    Number(deltaX);
-
-  const moveY =
-    Number(deltaY);
-
-  if (
-    !Number.isFinite(moveX)
-  ) {
-    return;
-  }
-
-  if (
-    !Number.isFinite(moveY)
-  ) {
-    return;
-  }
-
-  const selectedIdSet =
-    new Set(
-      selectedPieceIds
-    );
-
-  setPieces(
-    currentPieces =>
-      currentPieces.map(
-        piece => {
-          if (
-            !selectedIdSet.has(
-              piece.id
-            )
-          ) {
-            return piece;
-          }
-
-          return {
-            ...piece,
-
-            x:
-              roundToThreeDecimals(
-                piece.x +
-                moveX
-              ),
-
-            y:
-              roundToThreeDecimals(
-                piece.y +
-                moveY
-              )
-          };
-        }
-      )
-  );
-}
-
-function isPieceCollidingWithOtherPieces(piece) {
-  
-
-  return pieces.some(
-    (otherPiece) =>
-      otherPiece.id !== piece.id &&
-      isPieceCollidingWithPiece(
-        piece,
-        otherPiece
-      )
-  );
-}
-
-//escena 3D
- return (
-  <>
-  <Canvas
-  shadows
-  style={{
-    width: "100vw",
-    height: "100vh"
-  }}
-  camera={{
-  position: [
-    2800,
-    2100,
-    2800
-  ],
-  fov: 35,
-  near: 1,
-  far: 20000
-}}
-
-  onCreated={({
-    camera,
-    gl
-  }) => {
-    sceneCameraRef.current =
-      camera;
-
-    canvasElementRef.current =
-      gl.domElement;
-  }}
-  onPointerDown={
-    handleCanvasPointerDown
-  }
-  onDoubleClick={
-    handleCanvasDoubleClick
-  }
->
-    {/* Color de fons */}
-    <color attach="background" args={["white"]} />
-    <ambientLight intensity={0.8} />
-    
-    <directionalLight
-    castShadow
-    position={[1000, 2000, 1000]}
-    intensity={1.5}
-    shadow-mapSize-width={2048}
-    shadow-mapSize-height={2048}
-    shadow-camera-near={1}
-    shadow-camera-far={6000}
-    shadow-camera-left={-2500}
-    shadow-camera-right={2500}
-    shadow-camera-top={2500}
-    shadow-camera-bottom={-2500}
-/>  
-
-    {/* Posició i mides del palet */}
-
-{/* Palet */} 
-<Pallet
-  pallet={activePallet}
-/>
-
-{/* Eixos WORLD del palet */}
-<PalletWorldAxes
-  length={100}
-/>
-
- 
-{/* Genera una peça 3D per cada registre de l'array */}
-
-{activeConfigurator !==
-  "palletizing" &&
-  pieces.map((piece) => (
-    <DraggablePiece
-      key={piece.id}
-
-      piece={
-        piece
-      }
-
-      selected={
-        selectedPieceIds.includes(
-          piece.id
-        )
-      }
-
-      colliding={
-        isPieceCollidingWithPallet(
-          piece,
-          activePallet
-        ) ||
-        isPieceCollidingWithOtherPieces(
-          piece
-        )
-      }
-
-      outside={
-        isPieceOutsidePallet(
-          piece,
-          activePallet
-        )
-      }
-
-      dimmed={
-        shouldShowAppliedGripper &&
-        Boolean(activeGripper) &&
-        Boolean(selectedData) &&
-        piece.id !== selectedData.id
-      }
-
-      onSelect={
-        selectPiece
-      }
-
-      onMove={
-        movePiece
-      }
-
-      onDragStart={
-        startPieceDrag
-      }
-
-      onDragEnd={
-        finishPieceDrag
-      }
-
-      onReplicationStart={
-        startPieceReplication
-      }
-
-      onReplicationMove={
-        movePieceReplication
-      }
-
-      onReplicationEnd={
-        finishPieceReplication
-      }
-
-      onReplicationCancel={
-        cancelPieceReplication
-      }
-    />
-  ))}
-
-  {activeConfigurator !==
-  "palletizing" &&
-  replicationPreview && (
-    <ReplicationPreview
-      candidates={
-        replicationPreview.candidates
-      }
-    />
-  )}
-
-{activeConfigurator ===
-  "layers" &&
-  showOrderIds && (
-    <PieceOrderIdLabels
-      pieces={
-        pieces
-      }
-      validation={
-        orderIdValidation
-      }
-      onChangeOrderId={
-        updatePieceOrderId
-      }
-      t={
-    t
-  }
-/>
-  )}
-
-
-
-
-
-{activeConfigurator ===
-  "palletizing" &&
-  palletizedLayerInstances.map(
-    (layerInstance) => (
-      <PalletizedLayer
-        key={
-          layerInstance.instanceId
-        }
-        layerInstance={
-          layerInstance
-        }
-        selected={
-          layerInstance.instanceId ===
-          selectedPalletizingInstanceId
-        }
-        onSelect={
-          setSelectedPalletizingInstanceId
-        }
-      />
-    )
-  )}
-
-{!replicationPreview &&
-  activeConfigurator !==
-    "palletizing" &&
-  activeGripper &&
-  selectedData &&
-  shouldShowAppliedGripper && (
-    <AppliedGripper
-      gripper={
-        activeGripper
-      }
-      piece={
-        selectedData
-      }
-    
-  offsetPreview={
-    activeGripperOffsetPreview
-  }
-/>
-)}
-
-<FloorGrid
-  palletHeight={
-    activePallet.sizeZ
-  }
-/>
-
-
-
-    <OrbitControls
-    makeDefault
-ref={orbitControlsRef}
-  enabled={!isDragging}
-  target={orbitTarget}
-/>
-  </Canvas>
-
-  <ViewCube
-  cameraRef={
-    sceneCameraRef
-  }
-  controlsRef={
-    orbitControlsRef
-  }
-  fallbackTarget={
-    orbitTarget
-  }
-/>
-
-  <SelectionRectangle
-  rectangle={
-    selectionRectangle
-  }
-/>
-
-  <div
-  style={{
-    position: "absolute",
-    top: "16px",
-    left: "16px",
-    width: "300px",
-    maxHeight: "calc(100vh - 32px)",
-    overflowY: "auto",
-    boxSizing: "border-box",
-    padding: "14px",
-    background: "#ffffff",
-    border: "1px solid #c6ccd2",
-    borderRadius: "10px",
-    boxShadow:
-      "0 12px 32px rgba(0, 0, 0, 0.22)",
-    color: "#303840",
-    fontFamily:
-      "Arial, Helvetica, sans-serif"
-  }}
->
-
-<ProjectMenu
-  projectName={
-    activeProject.id
-      ? activeProject.name
-      : t.project.unnamed
-  }
-  hasUnsavedChanges={
-    hasUnsavedChanges
-  }
-  onNewProject={
-    createNewProject
-  }
-  onOpenProject={
-    openProjectDialog
-  }
-  onSaveProject={
-    saveCurrentProject
-  }
-  onSaveProjectAs={
-    saveCurrentProjectAs
-  }
-  t={
-    t
-  }
-/>
-
-<ConfiguratorMenu
-  activeConfigurator={
-    activeConfigurator
-  }
-  onSelectConfigurator={
-    handleConfiguratorSelection
-  }
-  t={
-    t
-  }
-/>
-
-{activeConfigurator ===
-  "gripper" && (
-  <section
-    data-gripper-configurator-panel="true"
-    style={{
-      ...panelSectionStyle,
-      marginBottom: "10px"
-    }}
-  >
-    <h4
-      style={{
-        margin: "0 0 9px 0",
-        color: "#4f5870",
-        fontSize: "14px",
-        textAlign: "center"
-      }}
-    >
-      {t.gripperPanel.title}
-    </h4>
-
-    <div
-      style={{
-        display: "flex",
-        gap: "8px"
-      }}
-    >
-      <button
-        type="button"
-        onClick={() => {
-          setIsGripperDialogOpen(
-            true
-          );
-        }}
-        style={{
-          flex: 1,
-          padding: "10px 7px",
-          border: "1px solid #2767c5",
-          borderRadius: "6px",
-          background: "#2767c5",
-          color: "#ffffff",
-          fontWeight: 700,
-          cursor: "pointer"
-        }}
-      >
-        {t.gripperPanel.newGripper}
-      </button>
-
-      <button
-        type="button"
-        disabled={!activeGripper}
-        onClick={() => {
-          setIsGripperVisible(
-            (currentValue) =>
-              !currentValue
-          );
-        }}
-        style={{
-          flex: 1,
-          padding: "10px 7px",
-          border: !activeGripper
-            ? "1px solid #b8c0c8"
-            : isGripperVisible
-              ? "1px solid #168447"
-              : "1px solid #2767c5",
-          borderRadius: "6px",
-          background: !activeGripper
-            ? "#eceff2"
-            : isGripperVisible
-              ? "#168447"
-              : "#ffffff",
-          color: !activeGripper
-            ? "#7b848d"
-            : isGripperVisible
-              ? "#ffffff"
-              : "#2767c5",
-          fontWeight: 700,
-          cursor: activeGripper
-            ? "pointer"
-            : "not-allowed"
-        }}
-      >
-        {isGripperVisible
-          ? t.gripperPanel.hideGripper
-          : t.gripperPanel.showGripper}
-      </button>
-    </div>
-  </section>
-)}
-
-
-
-{activeConfigurator ===
-  "separators" && (
-  <PieceActionPanel
-    type="separator"
-    canAct={
-      selectedIsSeparator
-    }
-    onCreate={
-      openSeparatorDialog
-    }
-    onDuplicate={
-      duplicatePiece
-    }
-    onDelete={
-      deleteSelectedPieces
-    }
-    t={
-      t
-    }
-  />
-)}
-
-
-{activeConfigurator ===
-  "pieces" && (
-  <PieceActionPanel
-    type="piece"
-    canAct={
-      selectedIsRegularPiece
-    }
-    onCreate={
-      openNewPieceDialog
-    }
-    onDuplicate={
-      duplicatePiece
-    }
-    onDelete={
-      deleteSelectedPieces
-    }
-    t={
-      t
-    }
-  />
-)}
-
-
-{activeConfigurator ===
-  "layers" && (
-  <LayerConfigurator
-    layerName={
-      layerName
-    }
-    onNewLayer={
-      requestNewEmptyLayer
-    }
-    onLayerNameChange={
-      setLayerName
-    }
-    onSaveLayer={() => {
-      saveCurrentLayer();
-    }}
-    layers={
-      layers
-    }
-    activeLayerId={
-      activeLayerId
-    }
-    onSelectLayer={
-      requestLayerSelection
-    }
-    onDeleteLayer={
-      requestDeleteSavedLayer
-    }
-    isCurrentLayerDirty={
-      isCurrentLayerDirty
-    }
-
-showOrderIds={
-  showOrderIds
-}
-
-onToggleOrderIds={() => {
-  setShowOrderIds(
-    (currentValue) =>
-      !currentValue
-  );
-}}
-
-  
-
-    showGripperOffsets={
-      showGripperOffsets
-    }
-
-    onToggleGripperOffsets={() => {
-      setShowGripperOffsets(
-        (currentValue) =>
-          !currentValue
-      );
-    }}
-
-    selectedPiece={
-      selectedData
-    }
-
-    genericGripperOffsets={
-      currentLayerGripperOffsets
-    }
-
-    gripperOffsetPreviewMode={
-      gripperOffsetPreviewMode
-    }
-
-    onGripperOffsetPreviewModeChange={
-      changeGripperOffsetPreviewMode
-    }
-
-    onChangeGenericGripperOffset={
-      updateGenericGripperOffset
-    }
-
-    onChangePieceGripperOffset={
-      updatePieceGripperOffset
-    }
-
-    onUseGenericGripperOffsets={
-      clearPieceGripperOffsets
-    }
-    t={
-    t
-  }
-/>
-)}
-
-{activeConfigurator ===
-  "palletizing" && (
-  <PalletizingConfigurator
-    layers={
-      layers
-    }
-    sequence={
-      palletizingSequence
-    }
-    selectedInstanceId={
-      selectedPalletizingInstanceId
-    }
-    onAddLayer={
-      addLayerToPalletizing
-    }
-    onSelectInstance={
-      setSelectedPalletizingInstanceId
-    }
-    t={
-    t
-  }
-/>
-)}
-
-
-{activeConfigurator !==
-  "palletizing" &&
-  selectedPieceIds.length > 1 && (
-  <section
-    style={{
-      ...panelSectionStyle,
-      marginBottom: "10px"
-    }}
-  >
-    <h4
-      style={{
-        margin: "0 0 8px 0",
-        color: "#4f5870",
-        fontSize: "14px",
-        textAlign: "center"
-      }}
-    >
-      {t.selection.multipleTitle}
-    </h4>
-
-    <div
-      style={{
-        padding: "8px",
-        borderRadius: "5px",
-        background: "#eef4fb",
-        color: "#244d7c",
-        fontSize: "13px",
-        fontWeight: 700,
-        textAlign: "center"
-      }}
-    >
-      {selectedPieceIds.length}
-      {" "}
-      {t.selection.selectedElements}
-    </div>
-
-    <div
-      style={{
-        marginTop: "8px",
-        color: "#59636e",
-        fontSize: "12px",
-        lineHeight: 1.45
-      }}
-    >
-      {t.selection.help}
-    </div>
-
-    <div
-  style={{
-    marginTop: "10px"
-  }}
->
-  <div
-    style={{
-      marginBottom: "8px",
-      textAlign: "center",
-      fontWeight: 700,
-      color: "#4f5870"
-    }}
-  >
-    {t.selection.groupMove}
-  </div>
-
-  <label
-    style={panelRowStyle}
-  >
-    X
-
-    <input
-      type="number"
-      value={groupMoveX}
-      onChange={(event) => {
-        setGroupMoveX(
-          event.target.value
-        );
-      }}
-      onKeyDown={(event) => {
-        if (
-          event.key === "Enter"
-        ) {
-          moveSelectedPieces(
-            groupMoveX || 0,
-            0
-          );
-
-          setGroupMoveX("");
-        }
-      }}
-      style={panelInputStyle}
-    />
-  </label>
-
-  <label
-    style={panelRowStyle}
-  >
-    Y
-
-    <input
-      type="number"
-      value={groupMoveY}
-      onChange={(event) => {
-        setGroupMoveY(
-          event.target.value
-        );
-      }}
-      onKeyDown={(event) => {
-        if (
-          event.key === "Enter"
-        ) {
-          moveSelectedPieces(
-            0,
-            groupMoveY || 0
-          );
-
-          setGroupMoveY("");
-        }
-      }}
-      style={panelInputStyle}
-    />
-  </label>
-
-  <div
-    style={{
-      marginTop: "6px",
-      fontSize: "12px",
-      color: "#59636e"
-    }}
-  >
-    {t.selection.groupMoveHelp}
-  </div>
-</div>
-  </section>
-)}
-
-
-{shouldShowSelectedData && (
-<>
-
-<h3
-  style={{
-    margin: "2px 0 12px 0",
-    textAlign: "center",
-    color: "#4f5870",
-    fontSize: "17px",
-    fontWeight: 700,
-    letterSpacing: "0.4px"
-  }}
->
-  {selectedIsSeparator
-  ? t.separators.selected
-  : t.pieces.selected}
-</h3>
-
-
-<section
-  style={{
-    ...panelSectionStyle,
-    marginBottom: "10px",
-    textAlign: "center"
-  }}
->
-  <div
-    style={{
-      fontSize: "13px",
-      marginBottom: "4px"
-    }}
-  >
-    <strong>
-  {t.common.id}:
-</strong>{" "}
-    {selectedData.orderId}
-  </div>
-
-  <div
-    style={{
-      fontSize: "13px",
-      marginBottom: "4px"
-    }}
-  >
-    <strong>
-  {t.common.name}:
-</strong>{" "}
-    {selectedData.name ??
-  (
-    selectedIsSeparator
-      ? `Separador ${selectedData.id}`
-      : `Peça ${selectedData.id}`
-  )}
-  </div>
-
-</section>
-
-
-
-
-
-
-
-
-
-<section
-
-
-  style={{
-    ...panelSectionStyle,
-    marginBottom: "10px"
-  }}
->
-  <h4
-    style={{
-      margin: "0 0 9px 0",
-      color: "#4f5870",
-      fontSize: "14px",
-      textAlign: "center"
-    }}
-  >
-    {t.reference.robotTcp} 
-  </h4>
-
-{!selectedIsSeparator && (
-  <label
-    style={{
-      ...panelRowStyle,
-      marginBottom: 0
-    }}
-  >
-    {t.reference.contactFace}
-
-    <select
-      value={
-        selectedData.referencePoint
-      }
-      onChange={(event) => {
-        const newReferencePoint =
-          event.target.value;
-
-        setPieces(
-          (currentPieces) =>
-            currentPieces.map(
-              (piece) =>
-                piece.id ===
-                selectedPieceId
-                  ? {
-                      ...piece,
-                      referencePoint:
-                        newReferencePoint
-                    }
-                  : piece
-            )
-        );
-      }}
-      style={panelSelectStyle}
-    >
-      {getReferencePointOptions(
-  selectedData
-).map(
-  (option) => (
-          <option
-            key={option.value}
-            value={option.value}
-          >
-            {t?.reference?.points?.[
-              option.value
-            ] ?? option.label}
-          </option>
-        )
-      )}
-      
-    </select>
-  </label>
-)}
-
-{selectedIsSeparator && (
-  <div
-    style={{
-      marginBottom: "9px",
-      padding: "7px",
-      borderRadius: "5px",
-      background: "#eef1f4",
-      color: "#34404b",
-      fontSize: "13px",
-      fontWeight: 700,
-      textAlign: "center"
-    }}
-  >
-    TOP_CENTER
-  </div>
-)}
-
-
-
-
-
-
-  <label style={panelRowStyle}>
-  <span>
-    {t.reference.faceOffsetX}
-  </span>
-
-  <input
-    type="number"
-    value={
-      selectedData.faceOffsetX
-    }
-    onChange={(event) => {
-      updatePieceField(
-        "faceOffsetX",
-        event.target.value
-      );
-    }}
-    style={panelInputStyle}
-  />
-</label>
-
-  <label style={panelRowStyle}>
-  <span>
-    {t.reference.faceOffsetY}
-  </span>
-
-  <input
-    type="number"
-    value={
-      selectedData.faceOffsetY
-    }
-    onChange={(event) => {
-      updatePieceField(
-        "faceOffsetY",
-        event.target.value
-      );
-    }}
-    style={panelInputStyle}
-  />
-</label>
-
-  <label style={panelRowStyle}>
-  <span>
-    {t.reference.faceRotation}
-  </span>
-
-  <input
-    type="number"
-    value={
-      selectedData.faceRotationDeg
-    }
-    onChange={(event) => {
-      updatePieceField(
-        "faceRotationDeg",
-        event.target.value
-      );
-    }}
-    style={panelInputStyle}
-  />
-</label>
-</section>
-
-
-
-<section
-  style={{
-    ...panelSectionStyle,
-    marginBottom: "10px"
-  }}
->
-  <h4
-    style={{
-      margin: "0 0 9px 0",
-      color: "#4f5870",
-      fontSize: "14px",
-      textAlign: "center"
-    }}
-  >
-    {selectedIsSeparator
-      ? t.separators.position
-      : t.pieces.position}
-  </h4>
-
-  <label style={panelRowStyle}>
-  <span>X</span>
-
-  <input
-    type="number"
-    value={inputX}
-    onChange={(event) => {
-      setInputX(
-        event.target.value
-      );
-
-      updateDisplayedCoordinates(
-        "x",
-        event.target.value
-      );
-    }}
-    style={panelInputStyle}
-  />
-</label>
-
-  <label style={panelRowStyle}>
-    Y
-
-    <input
-      type="number"
-      value={inputY}
-      onChange={(event) => {
-        setInputY(
-          event.target.value
-        );
-
-        updateDisplayedCoordinates(
-          "y",
-          event.target.value
-        );
-      }}
-      style={panelInputStyle}
-    />
-  </label>
-
-  <label style={panelRowStyle}>
-    Z
-
-    <input
-      type="number"
-      value={inputZ}
-      onChange={(event) => {
-        setInputZ(
-          event.target.value
-        );
-
-        updateDisplayedCoordinates(
-          "z",
-          event.target.value
-        );
-      }}
-      style={panelInputStyle}
-    />
-  </label>
-
-  <label style={panelRowStyle}>
-    RX
-
-    <input
-      type="number"
-      value={inputRX}
-      onChange={(event) => {
-        setInputRX(
-          event.target.value
-        );
-
-        updatePieceField(
-          "rxDeg",
-          event.target.value
-        );
-      }}
-      style={panelInputStyle}
-    />
-  </label>
-
-  <label style={panelRowStyle}>
-    RY
-
-    <input
-      type="number"
-      value={inputRY}
-      onChange={(event) => {
-        setInputRY(
-          event.target.value
-        );
-
-        updatePieceField(
-          "ryDeg",
-          event.target.value
-        );
-      }}
-      style={panelInputStyle}
-    />
-  </label>
-
-  <label
-    style={{
-      ...panelRowStyle,
-      marginBottom: 0
-    }}
-  >
-    RZ
-
-    <input
-      type="number"
-      value={inputRZ}
-      onChange={(event) => {
-        setInputRZ(
-          event.target.value
-        );
-
-        updatePieceField(
-          "rzDeg",
-          event.target.value
-        );
-      }}
-      style={panelInputStyle}
-    />
-  </label>
-</section>
-
-
-
-
-
-
-
-
-
-
-
-
-<section
-  style={panelSectionStyle}
->
-  <h4
-    style={{
-      margin: "0 0 9px 0",
-      color: "#4f5870",
-      fontSize: "14px",
-      textAlign: "center"
-    }}
-  >
-    {t.reference.orientation}
-  </h4>
-
-  <label style={panelRowStyle}>
-    Ref RX
-
-    <input
-      value={
-        referenceEuler.rx.toFixed(2)
-      }
-      readOnly
-      style={readOnlyInputStyle}
-    />
-  </label>
-
-  <label style={panelRowStyle}>
-    Ref RY
-
-    <input
-      value={
-        referenceEuler.ry.toFixed(2)
-      }
-      readOnly
-      style={readOnlyInputStyle}
-    />
-  </label>
-
-  <label
-    style={{
-      ...panelRowStyle,
-      marginBottom: 0
-    }}
-  >
-    Ref RZ
-
-    <input
-      value={
-        referenceEuler.rz.toFixed(2)
-      }
-      readOnly
-      style={readOnlyInputStyle}
-    />
-  </label>
-</section>
-
-</>
-)}
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-</div>
-
-<NewPieceDialog
-  open={
-    isNewPieceDialogOpen
-  }
-  onClose={() => {
-    setIsNewPieceDialogOpen(
-      false
-    );
-  }}
-  onCreatePiece={
-    createPieceFromDialog
-  }
-  t={
-    t
-  }
-/>
-
-<PalletDialog
-  open={isPalletDialogOpen}
-  activePallet={activePallet}
-  onClose={() => {
-    setIsPalletDialogOpen(
-      false
-    );
-  }}
-  onApplyPallet={applyPallet}
-  t={t}
-/>
-
-<OpenProjectDialog
-  open={
-    isOpenProjectDialogOpen
-  }
-  onClose={() => {
-    setIsOpenProjectDialogOpen(
-      false
-    );
-  }}
-  onOpenProject={
-    applyOpenedProject
-  }
-/>
-
-<LanguageJokeButton
-  visible={
-    isLanguageMessageVisible
-  }
-  onToggle={() => {
-    setIsLanguageMessageVisible(
-      (currentValue) =>
-        !currentValue
-    );
-  }}
-  activeLanguage={
-    activeLanguage
-  }
-  availableLanguages={
-    availableLanguages
-  }
-  onChangeLanguage={
-    setActiveLanguage
-  }
-  t={
-    t
-  }
-/>
-
-
-
-<SaveProjectDialog
-  open={
-    isSaveProjectDialogOpen
-  }
-  initialName={
-    saveProjectSuggestedName
-  }
-  onCancel={() => {
-    if (
-      isSavingProjectRef.current
-    ) {
+  const editingPiece = editingPieceId === null
+    ? null
+    : pieces.find((piece) => piece.id === editingPieceId) ?? null;
+
+  function openPieceEditor() {
+    if (!selectedIsRegularPiece) {
       return;
     }
 
-    setIsSaveProjectDialogOpen(
-      false
-    );
-  }}
-  onSave={(projectName) => {
-    confirmSaveCurrentProjectAs(
-      projectName
-    );
-  }}
-/>
-
-
-<ConfirmDialog
-  open={
-    confirmDialog.open
-  }
-  title={
-    confirmDialog.title
-  }
-  message={
-    confirmDialog.message
-  }
-  confirmLabel={
-    confirmDialog.confirmLabel
-  }
-  cancelLabel={
-    confirmDialog.cancelLabel
+    setEditingPieceId(selectedData.id);
+    setIsNewPieceDialogOpen(true);
   }
 
-  destructive={
-    confirmDialog.destructive
+  function closePieceDialog() {
+    setIsNewPieceDialogOpen(false);
+    setEditingPieceId(null);
   }
-  onConfirm={
-    confirmDialogAction
-  }
-  onCancel={
-    closeConfirmDialog
-  }
-/>
 
-<GripperDialog
-  open={
-    isGripperDialogOpen
-  }
-  activeGripper={
-    activeGripper
-  }
-  onClose={() => {
-    setIsGripperDialogOpen(
-      false
-    );
-  }}
-  onApplyGripper={
-    applyGripper
-  }
-  t={
-    t
-  }
-/>
+  /*
+    Desar l'edició d'una peça (només el nom):
+    - si ve d'una plantilla, el nom nou va a la plantilla
+      i a totes les peces d'aquest producte;
+    - si no és a la biblioteca i l'operari ho ha triat,
+      es desa a la biblioteca amb el nom nou;
+    - si no, només canvia el nom d'aquesta peça.
 
-<SeparatorDialog
-open={
-isSeparatorDialogOpen
-}
-onClose={() => {
-setIsSeparatorDialogOpen(
-false
-);
-}}
-onCreateSeparator={
-createSeparatorFromDialog
-}
-  t={
-    t
-  }
-/>
+    Retorna { error } si no es pot desar (el popup el
+    mostra i es queda obert).
+  */
+  function updatePieceFromDialog(pieceId, changes, { saveToLibrary = false } = {}) {
+    const piece = pieces.find((item) => item.id === pieceId);
+    const libraryPiece = piece
+      ? findLibraryPieceForPlaced(piece, pieceLibrary)
+      : null;
 
-<UnsavedLayerDialog
-  open={
-    isUnsavedLayerDialogOpen
+    if (libraryPiece) {
+      const result = conveyor.renameLibraryPiece(libraryPiece.id, changes.name);
+
+      if (result.error) {
+        return result;
+      }
+    } else if (piece && saveToLibrary) {
+      const template = conveyor.saveLibraryPieceFromPlaced(
+        { ...piece, ...changes },
+        { name: changes.name, renamePieces: true }
+      );
+
+      if (!template) {
+        return { error: t.pieceDialog.saveError };
+      }
+    } else {
+      pieceActions.updatePiece(pieceId, changes);
+    }
+
+    closePieceDialog();
+    return {};
   }
-  currentLayerName={
-    activeLayer?.name ??
-    layerName
+
+  // Plantilla de la biblioteca de la peça que s'edita (o null)
+  const editingLibraryPiece = editingPiece
+    ? findLibraryPieceForPlaced(editingPiece, pieceLibrary)
+    : null;
+
+  function createSeparatorFromDialog(separatorDefinition) {
+    pieceActions.createSeparator(separatorDefinition);
+    setActiveConfigurator("separators");
+    setIsSeparatorDialogOpen(false);
   }
-  onSave={
-    savePendingLayerChanges
+
+  const editingSeparator = editingSeparatorId === null
+    ? null
+    : pieces.find((piece) => piece.id === editingSeparatorId) ?? null;
+
+  function openSeparatorEditor() {
+    if (!selectedIsSeparator) {
+      return;
+    }
+
+    setEditingSeparatorId(selectedData.id);
+    setIsSeparatorDialogOpen(true);
   }
-  onDiscard={
-    discardPendingLayerChanges
+
+  function closeSeparatorDialog() {
+    setIsSeparatorDialogOpen(false);
+    setEditingSeparatorId(null);
   }
-  onCancel={
-    cancelPendingLayerSelection
-  }
-  t={
-    t
-  }
-/>
-<LayerOrderIdErrorDialog
-  open={
-    orderIdErrorDialog.open
-  }
-  message={
-    orderIdErrorDialog.message
-  }
-  onAccept={() => {
-    setOrderIdErrorDialog({
-      open: false,
-      message: ""
+
+  /*
+    Desar l'edició d'un separador: nom, mides i color.
+    La cara inferior es manté on era, de manera que un
+    gruix nou no el fa entrar dins la capa de sota.
+  */
+  function saveSeparatorFromDialog(separatorDefinition) {
+    if (!editingSeparator) {
+      return;
+    }
+
+    const heightChange =
+      Number(separatorDefinition.height) -
+      Number(editingSeparator.height);
+
+    pieceActions.updatePiece(editingSeparator.id, {
+      name: separatorDefinition.name || editingSeparator.name,
+      width: separatorDefinition.width,
+      depth: separatorDefinition.depth,
+      height: separatorDefinition.height,
+      topWidth: separatorDefinition.width,
+      topDepth: separatorDefinition.depth,
+      color: separatorDefinition.color,
+      z: roundToThreeDecimals(
+        Number(editingSeparator.z) + heightChange / 2
+      )
     });
-  }}
-  t={
-    t
   }
-/>
 
-</>
- );
+  function applyGripper(gripperDefinition) {
+    setActiveGripper({ ...gripperDefinition });
+    setIsGripperVisible(true);
+  }
 
+  return (
+    <>
+      <PalletScene
+        activeConfigurator={activeConfigurator}
+        activePallet={activePallet}
+        centerGuides={centerGuides}
+        pieces={pieces}
+        selectedPieceIds={selectedPieceIds}
+        selectedData={gripperTargetPiece}
+        selectedGripperPose={
+          selectedGraspLead
+            ? getOperationGripperPose(pieces, selectedGraspLead)
+            : null
+        }
+        selectedMemberIds={
+          selectedGraspLead
+            ? selectedGraspMembers.map((piece) => piece.id)
+            : null
+        }
+        activeGripper={activeGripper}
+        shouldShowAppliedGripper={shouldShowAppliedGripper}
+        gripperOffsetPreview={
+          gripperOffsets.activeGripperOffsetPreview
+        }
+        replicationPreview={replication.replicationPreview}
+        showOrderIds={layerEditor.showOrderIds}
+        orderIdValidation={layerEditor.orderIdValidation}
+        palletizedLayerInstances={
+          palletizing.palletizedLayerInstances
+        }
+        selectedPalletizingInstanceId={
+          selectedPalletizingInstanceId
+        }
+        offsetSimulation={sceneOffsetSimulation}
+        layerSimulation={sceneLayerSimulation}
+        operationMode={projectDocument.operationMode}
+        isDragging={isDragging}
+        sceneCameraRef={camera.sceneCameraRef}
+        canvasElementRef={camera.canvasElementRef}
+        orbitControlsRef={camera.orbitControlsRef}
+        orbitTarget={camera.orbitTarget}
+        pieceHandlers={pieceHandlers}
+        onChangeOrderId={layerEditor.updatePieceOrderId}
+        onDefineOrderIdClick={
+          graspEditor.isDefiningGrasps
+            ? graspEditor.clickGraspPiece
+            : layerEditor.isDefiningOrderIds
+            ? layerEditor.assignNextOrderId
+            : null
+        }
+        graspOverlay={{
+          groups: graspGroupStatuses,
+          gripper: activeGripper,
+          draft: graspEditor.graspDraftEvaluation
+            ? {
+                groupId: graspEditor.graspDraft.groupId,
+                memberIds: graspEditor.graspDraft.memberIds,
+                ...graspEditor.graspDraftEvaluation
+              }
+            : null
+        }}
+        onSelectPalletizingInstance={
+          setSelectedPalletizingInstanceId
+        }
+        onCanvasPointerDown={rectangle.handleCanvasPointerDown}
+        onCanvasDoubleClick={rectangle.handleCanvasDoubleClick}
+        t={t}
+      />
+
+      <ViewCube
+        cameraRef={camera.sceneCameraRef}
+        controlsRef={camera.orbitControlsRef}
+        fallbackTarget={camera.orbitTarget}
+      />
+
+      <SelectionRectangle rectangle={rectangle.selectionRectangle} />
+
+      <div style={sidePanelStyle}>
+        <ProjectMenu
+          projectName={
+            activeProject.id
+              ? activeProject.name
+              : t.project.unnamed
+          }
+          hasUnsavedChanges={hasUnsavedChanges}
+          autosaveFailed={autosave.autosaveFailed}
+          onNewProject={projectFile.createNewProject}
+          onOpenProject={projectFile.openProjectDialog}
+          onSaveProject={projectFile.saveCurrentProject}
+          onSaveProjectAs={projectFile.saveCurrentProjectAs}
+          onExportProject={projectFile.exportCurrentProject}
+          onImportFile={projectFile.importFromFile}
+          onExportBackup={projectFile.exportBackup}
+          t={t}
+        />
+
+        <ConfiguratorMenu
+          activeConfigurator={activeConfigurator}
+          onSelectConfigurator={handleConfiguratorSelection}
+          t={t}
+        />
+
+        {activeConfigurator === "gripper" && (
+          <GripperPanel
+            activeGripper={activeGripper}
+            isGripperVisible={isGripperVisible}
+            onNewGripper={() => setIsGripperDialogOpen(true)}
+            onToggleGripperVisible={() =>
+              setIsGripperVisible((currentValue) => !currentValue)
+            }
+            t={t}
+          />
+        )}
+
+        {activeConfigurator === "separators" && (
+          <PieceActionPanel
+            type="separator"
+            canAct={selectedIsSeparator}
+            onCreate={() => {
+              setEditingSeparatorId(null);
+              setIsSeparatorDialogOpen(true);
+            }}
+            onEdit={openSeparatorEditor}
+            onDuplicate={pieceActions.duplicatePiece}
+            duplicateSpacing={duplicateSpacing}
+            onChangeDuplicateSpacing={changeDuplicateSpacing}
+            onDelete={pieceActions.deleteSelectedPieces}
+            t={t}
+          />
+        )}
+
+        {activeConfigurator === "pieces" && (
+          <PieceActionPanel
+            type="piece"
+            canAct={selectedIsRegularPiece}
+            onCreate={() => {
+              setEditingPieceId(null);
+              setIsNewPieceDialogOpen(true);
+            }}
+            onEdit={openPieceEditor}
+            onDuplicate={pieceActions.duplicatePiece}
+            duplicateSpacing={duplicateSpacing}
+            onChangeDuplicateSpacing={changeDuplicateSpacing}
+            onDelete={pieceActions.deleteSelectedPieces}
+            t={t}
+          />
+        )}
+
+        {activeConfigurator === "conveyor" && (
+          <ConveyorConfiguratorPanel
+            items={conveyor.listItems}
+            onConfigure={conveyor.openConfiguration}
+            onSaveAndConfigure={conveyor.saveAndConfigure}
+            onDelete={conveyor.deleteConfiguration}
+            t={t}
+          />
+        )}
+
+        {activeConfigurator === "layers" && (
+          <LayerConfigurator
+            layerName={layerName}
+            onNewLayer={layerEditor.requestNewEmptyLayer}
+            operationMode={projectDocument.operationMode}
+            onOperationModeChange={changeOperationMode}
+            onLayerNameChange={setLayerName}
+            onSaveLayer={() => {
+              layerEditor.saveCurrentLayer();
+            }}
+            layers={layers}
+            activeLayerId={activeLayerId}
+            onSelectLayer={layerEditor.requestLayerSelection}
+            onDeleteLayer={layerEditor.requestDeleteSavedLayer}
+            isCurrentLayerDirty={layerEditor.isCurrentLayerDirty}
+            showOrderIds={layerEditor.showOrderIds}
+            onToggleOrderIds={layerEditor.toggleOrderIds}
+            isDefiningOrderIds={layerEditor.isDefiningOrderIds}
+            definedOrderIdCount={layerEditor.definedCount}
+            pieceCount={pieces.length}
+            operationCount={layerEditor.operationCount}
+            onToggleDefineOrderIds={toggleDefiningOrderIds}
+            showGripperOffsets={gripperOffsets.showGripperOffsets}
+            onToggleGripperOffsets={
+              gripperOffsets.toggleGripperOffsets
+            }
+            selectedPiece={gripperTargetPiece}
+            genericGripperOffsets={
+              gripperOffsets.currentLayerGripperOffsets
+            }
+            gripperOffsetPreviewMode={
+              gripperOffsets.gripperOffsetPreviewMode
+            }
+            onGripperOffsetPreviewModeChange={
+              changeGripperOffsetPreviewMode
+            }
+            onChangeGenericGripperOffset={
+              gripperOffsets.updateGenericGripperOffset
+            }
+            onChangePieceGripperOffset={
+              gripperOffsets.updatePieceGripperOffset
+            }
+            onUseGenericGripperOffsets={
+              gripperOffsets.clearPieceGripperOffsets
+            }
+            hasGripper={Boolean(activeGripper)}
+            offsetSimulationMode={
+              simulatedPiece
+                ? simulation.offsetSimulation.mode
+                : null
+            }
+            onSimulateOffset={simulation.startOffsetSimulation}
+            simulationSpeed={simulation.simulationSpeed}
+            simulatingLayerId={simulatedLayer?.id ?? null}
+            onSimulateLayer={simulation.startLayerSimulation}
+            graspPanel={{
+              pieces,
+              disabled: pieces.length === 0,
+              isDefining: graspEditor.isDefiningGrasps,
+              draft: graspEditor.graspDraft,
+              draftMembers: graspEditor.graspDraftMembers,
+              evaluation: graspEditor.graspDraftEvaluation,
+              message: graspEditor.graspMessage,
+              reviewGroups: graspGroupStatuses.filter(
+                (status) => status.issues.length > 0
+              ),
+              onToggle: graspEditor.toggleDefiningGrasps,
+              onAdjust: graspEditor.changeGraspAdjust,
+              onConfirm: graspEditor.confirmGraspDraft,
+              onCancel: graspEditor.cancelGraspDraft,
+              onDissolve: graspEditor.dissolveGraspDraft
+            }}
+            t={t}
+          />
+        )}
+
+        {activeConfigurator === "palletizing" && (
+          <PalletizingConfigurator
+            layers={layers}
+            sequence={palletizingSequence}
+            selectedInstanceId={selectedPalletizingInstanceId}
+            onAddLayer={palletizing.addLayerToPalletizing}
+            onSelectInstance={setSelectedPalletizingInstanceId}
+            t={t}
+          />
+        )}
+
+        {activeConfigurator !== "palletizing" &&
+          selectedPieceIds.length > 1 && (
+            <MultiSelectionPanel
+              selectedCount={selectedPieceIds.length}
+              onMoveSelection={pieceActions.moveSelectedPieces}
+              t={t}
+            />
+          )}
+
+        {shouldShowSelectedData && (
+          <SelectedPiecePanel
+            piece={selectedData}
+            isSeparator={selectedIsSeparator}
+            setPieces={setPieces}
+            t={t}
+          />
+        )}
+      </div>
+
+      <NewPieceDialog
+        open={isNewPieceDialogOpen}
+        onClose={closePieceDialog}
+        onCreatePiece={createPieceFromDialog}
+        editingPiece={editingPiece}
+        onUpdatePiece={updatePieceFromDialog}
+        editingLibraryPiece={editingLibraryPiece}
+        requestPieceDeletion={conveyor.requestPieceDeletion}
+        t={t}
+      />
+
+      {conveyor.dialogPiece && (
+        <ConveyorConfigurationDialog
+          key={conveyor.dialogPiece.id}
+          piece={conveyor.dialogPiece}
+          configuration={conveyor.dialogConfiguration}
+          activeGripper={activeGripper}
+          onSave={conveyor.saveConfiguration}
+          onClose={conveyor.closeDialog}
+          t={t}
+        />
+      )}
+
+      <PalletDialog
+        open={isPalletDialogOpen}
+        activePallet={activePallet}
+        onClose={() => setIsPalletDialogOpen(false)}
+        onApplyPallet={(palletDefinition) =>
+          setActivePallet({ ...palletDefinition })
+        }
+        t={t}
+      />
+
+      <OpenProjectDialog
+        open={projectFile.isOpenProjectDialogOpen}
+        onClose={projectFile.closeOpenProjectDialog}
+        onOpenProject={projectFile.applyOpenedProject}
+      />
+
+      <LanguageJokeButton
+        visible={isLanguageMessageVisible}
+        onToggle={() =>
+          setIsLanguageMessageVisible(
+            (currentValue) => !currentValue
+          )
+        }
+        onHide={() => setIsLanguageMessageVisible(false)}
+        activeLanguage={activeLanguage}
+        availableLanguages={availableLanguages}
+        onChangeLanguage={setActiveLanguage}
+        t={t}
+      />
+
+      <SaveProjectDialog
+        open={projectFile.isSaveProjectDialogOpen}
+        initialName={projectFile.saveProjectSuggestedName}
+        onCancel={projectFile.cancelSaveProjectAs}
+        onSave={projectFile.confirmSaveCurrentProjectAs}
+      />
+
+      <ConfirmDialog
+        open={confirmDialog.open}
+        title={confirmDialog.title}
+        message={confirmDialog.message}
+        confirmLabel={confirmDialog.confirmLabel}
+        cancelLabel={confirmDialog.cancelLabel}
+        destructive={confirmDialog.destructive}
+        onConfirm={confirmDialogAction}
+        onCancel={closeConfirmDialog}
+        secondaryLabel={confirmDialog.secondaryLabel}
+        onSecondary={confirmDialogSecondaryAction}
+      />
+
+      <GripperDialog
+        open={isGripperDialogOpen}
+        activeGripper={activeGripper}
+        onClose={() => setIsGripperDialogOpen(false)}
+        onApplyGripper={applyGripper}
+        t={t}
+      />
+
+      <SeparatorDialog
+        open={isSeparatorDialogOpen}
+        editingSeparator={editingSeparator}
+        onClose={closeSeparatorDialog}
+        onCreateSeparator={createSeparatorFromDialog}
+        onSaveSeparator={saveSeparatorFromDialog}
+        t={t}
+      />
+
+      <UnsavedLayerDialog
+        open={layerEditor.isUnsavedLayerDialogOpen}
+        currentLayerName={
+          layerEditor.activeLayer?.name ?? layerName
+        }
+        onSave={layerEditor.savePendingLayerChanges}
+        onDiscard={layerEditor.discardPendingLayerChanges}
+        onCancel={layerEditor.cancelPendingLayerSelection}
+        t={t}
+      />
+
+      <LayerOrderIdErrorDialog
+        open={layerEditor.orderIdErrorDialog.open}
+        message={layerEditor.orderIdErrorDialog.message}
+        onAccept={layerEditor.closeOrderIdErrorDialog}
+        t={t}
+      />
+    </>
+  );
 }
-
-
-
-
-
-

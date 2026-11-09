@@ -1,13 +1,16 @@
 import {
   useMemo,
-  useRef
+  useRef,
+  useState
 } from "react";
 import {
   Canvas,
   useFrame
 } from "@react-three/fiber";
-import { Text } from "@react-three/drei";
+import { Billboard, RoundedBox, Text } from "@react-three/drei";
 import * as THREE from "three";
+// Font inclosa al programa: sense ella, Text la baixa d'internet
+import viewCubeFontUrl from "../assets/fonts/roboto-latin-700-normal.woff";
 
 const CAMERA_ANIMATION_MS = 280;
 const WORLD_UP = new THREE.Vector3(0, 1, 0);
@@ -57,42 +60,52 @@ const VIEWS = {
   )
 };
 
+/*
+  Cares del cub en el seu espai local. El cub es dibuixa
+  girat Ry(π) respecte de Three.js, per tant en local:
+  +Z = +X del robot (davant), +X = +Y del robot
+  (esquerra) i +Y = +Z del robot (amunt). Cada etiqueta
+  és a la cara que veu la càmera de la seva vista (VIEWS):
+  en clicar FRONT, la cara FRONT queda de cara a la
+  pantalla.
+*/
 const FACES = [
   {
     key: "front",
     label: "FRONT",
-    position: [0, 0, -0.505],
-    rotation: [0, Math.PI, 0]
-  },
-  {
-    key: "back",
-    label: "BACK",
     position: [0, 0, 0.505],
     rotation: [0, 0, 0]
   },
   {
+    key: "back",
+    label: "BACK",
+    position: [0, 0, -0.505],
+    rotation: [0, Math.PI, 0]
+  },
+  {
     key: "left",
     label: "LEFT",
-    position: [-0.505, 0, 0],
-    rotation: [0, -Math.PI / 2, 0]
+    position: [0.505, 0, 0],
+    rotation: [0, Math.PI / 2, 0]
   },
   {
     key: "right",
     label: "RIGHT",
-    position: [0.505, 0, 0],
-    rotation: [0, Math.PI / 2, 0]
+    position: [-0.505, 0, 0],
+    rotation: [0, -Math.PI / 2, 0]
   },
   {
     key: "top",
     label: "TOP",
     position: [0, 0.505, 0],
-    rotation: [-Math.PI / 2, 0, 0]
+    // Mig gir en el pla: el text es llegeix bé des de la vista de dalt
+    rotation: [-Math.PI / 2, 0, Math.PI]
   },
   {
     key: "bottom",
     label: "BOTTOM",
     position: [0, -0.505, 0],
-    rotation: [Math.PI / 2, 0, 0]
+    rotation: [Math.PI / 2, 0, Math.PI]
   }
 ];
 
@@ -115,10 +128,30 @@ function getPalletCenter(
   );
 }
 
+const COLORS = {
+  body: "#f1f5f9",
+  face: "#ffffff",
+  faceHover: "#dbeafe",
+  faceBorder: "#cbd5e1",
+  label: "#334155",
+  labelHover: "#1d4ed8",
+  // Mateixos colors que els eixos de l'escena
+  axisX: "#ef4444",
+  axisY: "#16a34a",
+  axisZ: "#2563eb"
+};
+
+/*
+  Cara clicable del cub: un panell una mica inserit
+  sobre el cos arrodonit, que es ressalta en passar-hi
+  el ratolí.
+*/
 function CubeFace({
   definition,
   onSelect
 }) {
+  const [hovered, setHovered] = useState(false);
+
   return (
     <group
       position={definition.position}
@@ -129,56 +162,109 @@ function CubeFace({
           event.stopPropagation();
           onSelect(definition.key);
         }}
+        onPointerOver={(event) => {
+          event.stopPropagation();
+          setHovered(true);
+        }}
+        onPointerOut={() => setHovered(false)}
       >
-        <planeGeometry
-          args={[0.98, 0.98]}
-        />
+        <planeGeometry args={[0.8, 0.8]} />
 
         <meshStandardMaterial
-          color="#f4f7f9"
-          roughness={0.78}
+          color={hovered ? COLORS.faceHover : COLORS.face}
+          roughness={0.55}
           metalness={0}
-          side={THREE.DoubleSide}
         />
       </mesh>
 
       <lineSegments
-        position={[0, 0, 0.004]}
+        position={[0, 0, 0.002]}
         raycast={() => null}
       >
-        <edgesGeometry
-          args={[
-            new THREE.PlaneGeometry(
-              0.98,
-              0.98
-            )
-          ]}
-        />
-
-        <lineBasicMaterial
-          color="#4e5862"
-        />
+        <edgesGeometry args={[FACE_OUTLINE_GEOMETRY]} />
+        <lineBasicMaterial color={COLORS.faceBorder} />
       </lineSegments>
 
       <Text
-  position={[0, 0, 0.012]}
-  rotation={[
-    0,
-    0,
-    0
-  ]}
-  fontSize={0.19}
-  color="#303840"
-  anchorX="center"
-  anchorY="middle"
-  fontWeight={700}
-  raycast={() => null}
->
-  {definition.label}
-</Text>
+        font={viewCubeFontUrl}
+        position={[0, 0, 0.006]}
+        fontSize={0.155}
+        letterSpacing={0.04}
+        color={hovered ? COLORS.labelHover : COLORS.label}
+        anchorX="center"
+        anchorY="middle"
+        fontWeight={700}
+        raycast={() => null}
+      >
+        {definition.label}
+      </Text>
     </group>
   );
 }
+
+const FACE_OUTLINE_GEOMETRY = new THREE.PlaneGeometry(0.8, 0.8);
+
+/*
+  Eix del robot (fletxa amb etiqueta) dibuixat des de la
+  cantonada d'origen del cub.
+*/
+function AxisArrow({ direction, color, label }) {
+  const start = AXIS_ORIGIN;
+  const end = AXIS_ORIGIN.clone().addScaledVector(direction, AXIS_LENGTH);
+  const quaternion = new THREE.Quaternion().setFromUnitVectors(
+    new THREE.Vector3(0, 1, 0),
+    direction
+  );
+
+  return (
+    <group raycast={() => null}>
+      <mesh
+        position={start.clone().lerp(end, 0.5)}
+        quaternion={quaternion}
+        raycast={() => null}
+      >
+        <cylinderGeometry args={[0.022, 0.022, AXIS_LENGTH, 12]} />
+        <meshBasicMaterial color={color} />
+      </mesh>
+
+      <mesh position={end} quaternion={quaternion} raycast={() => null}>
+        <coneGeometry args={[0.065, 0.16, 16]} />
+        <meshBasicMaterial color={color} />
+      </mesh>
+
+      {/* La lletra sempre mira a la càmera */}
+      <Billboard position={end.clone().addScaledVector(direction, 0.17)}>
+        <Text
+          font={viewCubeFontUrl}
+          fontSize={0.17}
+          color={color}
+          anchorX="center"
+          anchorY="middle"
+          fontWeight={800}
+          raycast={() => null}
+        >
+          {label}
+        </Text>
+      </Billboard>
+    </group>
+  );
+}
+
+/*
+  Cantonada d'origen i direccions dels eixos del robot
+  dins del cub. El cub es dibuixa girat Ry(π) respecte de
+  Three.js (palletToThreeQuaternion), per tant:
+  X robot = (0,0,-1) Three → (0,0,1) cub
+  Y robot = (-1,0,0) Three → (1,0,0) cub
+  Z robot = (0,1,0)  Three → (0,1,0) cub
+*/
+const AXIS_ORIGIN = new THREE.Vector3(-0.5, -0.5, -0.5);
+const AXIS_LENGTH = 1.42;
+const ROBOT_AXES = [
+  { label: "X", direction: new THREE.Vector3(0, 0, 1), color: COLORS.axisX },
+  { label: "Y", direction: new THREE.Vector3(1, 0, 0), color: COLORS.axisY },
+  { label: "Z", direction: new THREE.Vector3(0, 1, 0), color: COLORS.axisZ }
+];
 
 function OrientationCube({
   cameraRef,
@@ -232,12 +318,30 @@ function OrientationCube({
 
   return (
     <group ref={groupRef}>
+      {/* Cos del cub amb arestes i cantonades arrodonides */}
+      <RoundedBox
+        args={[1, 1, 1]}
+        radius={0.12}
+        smoothness={4}
+        raycast={() => null}
+      >
+        <meshStandardMaterial
+          color={COLORS.body}
+          roughness={0.6}
+          metalness={0}
+        />
+      </RoundedBox>
+
       {FACES.map((definition) => (
         <CubeFace
           key={definition.key}
           definition={definition}
           onSelect={onSelectView}
         />
+      ))}
+
+      {ROBOT_AXES.map((axis) => (
+        <AxisArrow key={axis.label} {...axis} />
       ))}
     </group>
   );
@@ -373,30 +477,26 @@ export default function ViewCube({
       aria-label="Control d'orientacio 3D"
       style={{
         position: "absolute",
-        right: "18px",
-        bottom: "18px",
-        width: "92px",
-        height: "92px",
+        right: "14px",
+        bottom: "14px",
+        width: "124px",
+        height: "124px",
         zIndex: 20,
-        overflow: "hidden",
-        borderRadius: "46px",
-        border:
-          "1px solid rgba(95, 105, 115, 0.30)",
-        background:
-          "rgba(255, 255, 255, 0.86)",
-        boxShadow:
-          "0 6px 18px rgba(0, 0, 0, 0.16)",
-        backdropFilter: "blur(5px)",
         userSelect: "none",
         touchAction: "none",
-        cursor: "pointer"
+        cursor: "pointer",
+        /*
+          Sense cercle que retalli: el cub i els eixos es
+          veuen sencers, amb una ombra suau.
+        */
+        filter: "drop-shadow(0 4px 10px rgba(15, 23, 42, 0.22))"
       }}
     >
       <Canvas
         orthographic
         camera={{
           position: [0, 0, 4],
-          zoom: 62,
+          zoom: 44,
           near: 0.1,
           far: 20
         }}
@@ -410,11 +510,16 @@ export default function ViewCube({
           background: "transparent"
         }}
       >
-        <ambientLight intensity={1.5} />
+        <ambientLight intensity={1.6} />
 
         <directionalLight
-          position={[3, 4, 5]}
-          intensity={1.2}
+          position={[2, 3, 4]}
+          intensity={1.1}
+        />
+
+        <directionalLight
+          position={[-3, -2, 2]}
+          intensity={0.35}
         />
 
         <OrientationCube

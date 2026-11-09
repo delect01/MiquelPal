@@ -1,3 +1,5 @@
+import NumericInput from "./NumericInput.jsx";
+import SimulateButton from "./SimulateButton.jsx";
 const EMPTY_OFFSETS = {
   approach: { x: 0, y: 0, z: 0 },
   retreat: { x: 0, y: 0, z: 0 }
@@ -8,7 +10,8 @@ function OffsetFields({
   values,
   active,
   onTitleClick,
-  onChange
+  onChange,
+  simulation
 }) {
   const inputStyle = {
     width: "100%",
@@ -34,26 +37,35 @@ function OffsetFields({
           : "#ffffff"
       }}
     >
-      <button
-        type="button"
-        onClick={onTitleClick}
+      <div
         style={{
-          width: "100%",
-          padding: 0,
-          border: 0,
-          background: "transparent",
-          color: active
-            ? "#168447"
-            : "#4f5870",
-          fontSize: "12px",
-          fontWeight: 700,
-          textAlign: "left",
-          cursor: "pointer"
+          display: "flex",
+          alignItems: "center",
+          gap: "6px"
         }}
       >
-        {title}
-        {}
-      </button>
+        <button
+          type="button"
+          onClick={onTitleClick}
+          style={{
+            flex: 1,
+            padding: 0,
+            border: 0,
+            background: "transparent",
+            color: active
+              ? "#168447"
+              : "#4f5870",
+            fontSize: "12px",
+            fontWeight: 700,
+            textAlign: "left",
+            cursor: "pointer"
+          }}
+        >
+          {title}
+        </button>
+
+        {simulation && <SimulateButton {...simulation} />}
+      </div>
 
       <div
         style={{
@@ -77,15 +89,10 @@ function OffsetFields({
             }}
           >
             {axis}
-            <input
-              type="number"
-              step="1"
+            <NumericInput
               value={values?.[axis] ?? 0}
-              onChange={(event) => {
-                onChange(
-                  axis,
-                  event.target.value
-                );
+              onChange={(value) => {
+                onChange(axis, value);
               }}
               style={inputStyle}
             />
@@ -104,6 +111,10 @@ export default function GripperOffsetsPanel({
   onChangeGenericOffset,
   onChangePieceOffset,
   onUseGenericOffsets,
+  hasGripper = false,
+  simulationMode = null,
+  simulationSpeed = 1,
+  onSimulate,
   t
 }) {
   const hasCustomOffsets =
@@ -137,6 +148,25 @@ export default function GripperOffsetsPanel({
       axis,
       value
     );
+  }
+
+  /*
+    La simulació necessita una peça seleccionada;
+    sense pinça el botó queda desactivat.
+  */
+  function getSimulation(mode, title) {
+    if (!editingPiece || !onSimulate) {
+      return null;
+    }
+
+    return {
+      running: simulationMode === mode,
+      disabled: !hasGripper,
+      title: hasGripper
+        ? title
+        : t.gripperOffsets.simulationNeedsGripper,
+      onClick: () => onSimulate(mode)
+    };
   }
 
   function togglePreview(mode) {
@@ -185,10 +215,33 @@ export default function GripperOffsetsPanel({
         </div>
       )}
 
+      {simulationMode && (
+        <div
+          style={{
+            marginTop: "7px",
+            padding: "6px 8px",
+            borderRadius: "5px",
+            background: "#eef9f2",
+            color: "#168447",
+            fontSize: "11px",
+            fontWeight: 700,
+            textAlign: "center"
+          }}
+        >
+          {t.gripperOffsets.simulationHint}
+          {" · ×"}
+          {simulationSpeed}
+        </div>
+      )}
+
       <OffsetFields
         title={t.gripperOffsets.approach}
         values={effectiveOffsets.approach}
         active={previewMode === "approach"}
+        simulation={getSimulation(
+          "approach",
+          t.gripperOffsets.simulateApproach
+        )}
         onTitleClick={() => {
           togglePreview("approach");
         }}
@@ -205,6 +258,10 @@ export default function GripperOffsetsPanel({
         title={t.gripperOffsets.retreat}
         values={effectiveOffsets.retreat}
         active={previewMode === "retreat"}
+        simulation={getSimulation(
+          "retreat",
+          t.gripperOffsets.simulateRetreat
+        )}
         onTitleClick={() => {
           togglePreview("retreat");
         }}

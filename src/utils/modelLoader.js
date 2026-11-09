@@ -42,14 +42,15 @@ function parseGlb(buffer) {
 function parseStl(buffer) {
   const geometry = new STLLoader().parse(buffer);
   geometry.computeVertexNormals();
-  return new THREE.Mesh(
-    geometry,
-    new THREE.MeshStandardMaterial({
-      color: "#f28c28",
-      roughness: 0.58,
-      metalness: 0
-    })
-  );
+  // Mateix acabat que les peces creades; es pinta amb el color de la peça
+  const material = new THREE.MeshStandardMaterial({
+    color: "orange",
+    roughness: 0.65,
+    metalness: 0
+  });
+  material.userData.usesPieceColor = true;
+
+  return new THREE.Mesh(geometry, material);
 }
 
 function cloneMaterials(object) {
@@ -203,17 +204,54 @@ async function getSource(modelId) {
   return value;
 }
 
+/*
+  Model preparat (orientat, centrat i amb el volum de
+  col·lisió) per model i cara inferior. Es calcula una
+  sola vegada: abans cada peça del mateix model ho
+  repetia, i obrir un projecte amb moltes peces
+  importades bloquejava la interfície.
+*/
+const preparedCache = new Map();
+
 export async function loadStoredModel(
   modelId,
   bottomFace = "NEGATIVE_Y"
 ) {
-  const { source, record } = await getSource(modelId);
-  return prepareObject(source, record.unit, bottomFace);
+  const key = `${modelId}|${bottomFace}`;
+
+  if (!preparedCache.has(key)) {
+    const preparing = getSource(modelId).then(({ source, record }) =>
+      prepareObject(source, record.unit, bottomFace)
+    );
+
+    // Si falla, es podrà tornar a provar
+    preparing.catch(() => preparedCache.delete(key));
+    preparedCache.set(key, preparing);
+  }
+
+  const prepared = await preparedCache.get(key);
+
+  // Cada ús rep el seu objecte i materials (es pinten per estat)
+  const object = prepared.object.clone(true);
+  cloneMaterials(object);
+
+  return {
+    object,
+    dimensions: { ...prepared.dimensions },
+    collisionGeometry: prepared.collisionGeometry
+  };
 }
 
 export function clearModelMemoryCache(modelId = null) {
-  if (modelId) sourceCache.delete(modelId);
-  else sourceCache.clear();
+  if (modelId) {
+    sourceCache.delete(modelId);
+    [...preparedCache.keys()]
+      .filter((key) => key.startsWith(`${modelId}|`))
+      .forEach((key) => preparedCache.delete(key));
+  } else {
+    sourceCache.clear();
+    preparedCache.clear();
+  }
 }
 
 function getTopSurfaceFootprint(object) {

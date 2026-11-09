@@ -29,6 +29,7 @@ export const SUPPORTED_LANGUAGES = [
 const translations = {
   ca: {
     project: {
+      autosaveFailed: "No s’ha pogut desar la còpia de recuperació (l’emmagatzematge del navegador és ple). Guarda el projecte per no perdre els canvis.",
       unnamed: "Projecte sense nom",
       recovered: "Projecte recuperat",
       saved: "Projecte guardat",
@@ -47,6 +48,7 @@ const translations = {
         "S'ha trobat una sessió anterior sense guardar. Vols recuperar-la?",
       copySuffix: "còpia"
     },
+    transfer: { importTitle: "Importar un projecte", importedSuffix: "(importat)", invalidFile: "Aquest fitxer no és un projecte ni una còpia de seguretat de MiquelPal.", importError: "No s'ha pogut importar el fitxer.", exportError: "No s'ha pogut exportar.", backupTitle: "Importar una còpia de seguretat", backupMessage: "S'afegiran els projectes, les biblioteques i els models 3D de la còpia que encara no hi siguin. No s'esborrarà ni se substituirà res. En acabar, el programa es tornarà a carregar.", backupConfirm: "Importar", backupDone: ({ projectCount, itemCount, modelCount }) => `Còpia importada: ${projectCount} projectes, ${itemCount - projectCount} elements de biblioteca i ${modelCount} models 3D nous.` },
     projectMenu: {
       title: "Projecte",
       saved: "Projecte guardat",
@@ -54,7 +56,8 @@ const translations = {
       newProject: "Nou projecte",
       openProject: "Obrir projecte",
       save: "Guardar",
-      saveAs: "Guardar com a..."
+      saveAs: "Guardar com a...",
+      exportProject: "Exportar projecte...", importFile: "Importar fitxer...", exportBackup: "Còpia de seguretat..."
     },
     palletDialog: {
       configure: "Configurar palet",
@@ -73,7 +76,6 @@ const translations = {
       color: "Color",
       saveCharacteristics: "Guardar nom i característiques",
       preview3D: "Previsualització 3D",
-      surfaceHelp: "La superfície superior sempre correspon a Z WORLD = 0.",
       applyPallet: "Aplicar palet",
       invalidDimensions: "Les dimensions X, Y i Z han de ser nombres superiors a zero.",
       nameRequired: "Has d'escriure un nom abans de guardar el palet.",
@@ -104,7 +106,7 @@ const translations = {
       offsetX: "Desplaçar X",
       offsetY: "Desplaçar Y",
       robotFront: "Robot Front",
-      localTcp: "TCP local",
+      localTcp: "TCP local", activeZone: "Zona d'agafada", zoneSizeX: "Mida X", zoneSizeY: "Mida Y", zoneCenterX: "Centre X", zoneCenterY: "Centre Y", zoneAuto: "Automàtica",
       selectTcp: "Seleccionar TCP sobre el model",
       selectingTcp: "Seleccionant TCP...",
       position: "Pos",
@@ -129,10 +131,87 @@ const translations = {
       pallet: "Configurador palet",
       pieces: "Configurador peces",
       separators: "Configurador separadors",
+      conveyor: "Configurador cinta",
       layers: "Configurador capes",
       palletizing: "Configurador paletitzat"
     },
+    conveyorConfigurator: {
+      close: "Tancar",
+      title: "CONFIGURADOR CINTA",
+      search: "Cercar peça…",
+      noPieces: "Encara no hi ha cap peça al palet. Les peces apareixen aquí quan les col·loques en alguna capa.",
+      noResults: "Cap peça coincideix amb la cerca.",
+      states: { configured: "Configurada", notConfigured: "Sense configurar", needsReview: "Necessita revisió", notSaved: "No guardada a la biblioteca", templateMissing: "Plantilla eliminada" },
+      saveAndConfigure: "Guardar i configurar",
+      configure: "Configurar",
+      edit: "Editar",
+      review: "Revisar",
+      delete: "Eliminar",
+      dialogTitle: "Configuració de cinta",
+      pieceInfoTitle: "Peça",
+      geometryChangedWarning: "La geometria de la peça ha canviat des que es va calcular aquesta configuració. Revisa la cara de contacte i la cara d'agafada abans de guardar.",
+      confirmReview: "He revisat les cares",
+      migrationWarning: "Aquest projecte tenia diverses configuracions per a aquesta peça i no s'ha pogut saber quina era la més recent. Revisa aquesta i guarda-la: les altres es descartaran.",
+      missingTitle: "Per guardar falta:",
+      missing: {
+        beltWidth: "amplada de la cinta vàlida",
+        review: "revisar la geometria",
+        contactFace: "cara de contacte",
+        graspFace: "cara d'agafada",
+        invalidGrasp: "una agafada vàlida",
+        tcp: "TCP vàlid"
+      },
+      save: "Guardar",
+      deleteTitle: "Eliminar configuració de cinta",
+      deleteMessage: (name) => "Vols eliminar la configuració de cinta de «" + name + "»? Aquesta acció no eliminarà la peça.",
+      deletePieceTitle: "Eliminar peça",
+      deletePieceMessage: (name) => "La peça «" + name + "» té una configuració de cinta. Si l'elimines, també s'eliminarà la seva configuració de cinta. Vols continuar?",
+      deletePieceConfirm: "Eliminar peça i configuració"
+    },
+    conveyor: {
+      beltWidth: "Amplada de la cinta",
+      beltWidthHelp: "Comuna per a totes les peces i projectes. La peça queda centrada al mig de la cinta.",
+      tcpNeedsReview: "Cal revisar la peça", tcpGeometryChanged: "Geometria modificada", frameZUp: "Frame de la cinta, Z cap amunt",
+      sectionTitle: "Col·locació sobre la cinta",
+      contactFace: "Cara en contacte amb la cinta",
+      selectContactFace: "Selecciona una cara…",
+      contactFaceHelp: "Clica una cara de la peça al visualitzador o tria-la a la llista.",
+      faceNumber: (number) => "Cara " + number,
+      rotation: "Rotació sobre la cinta",
+      noGripper: "Crea una pinça al configurador de pinça per poder-la veure aquí.",
+      graspTitle: "Agafada del robot",
+      graspFace: "Cara d'agafada",
+      tcpTitle: "TCP respecte del frame de la cinta",
+      tcpValid: "TCP calculat",
+      tcpIncomplete: "Configuració incompleta",
+      tcpError: "No s'ha pogut calcular el TCP",
+      reasons: {
+        graspFromBelow: "la cara d'agafada només es pot agafar des de sota la cinta",
+        beltTooNarrow: "la peça no cap a l'amplada de la cinta",
+        missingPiece: "falta seleccionar la peça", geometryChanged: "la geometria de la peça ha canviat", notCalculated: "encara no s'ha calculat",
+        missingContactFace: "falta la cara en contacte amb la cinta",
+        missingGraspFace: "falta la cara d'agafada",
+        geometryNotLoaded: "la geometria encara no està carregada",
+        unknownContactFace: "la cara de contacte ja no existeix",
+        invalidGraspOffsets: "els offsets d'agafada no són vàlids",
+        invalidTransform: "la transformació no es pot calcular"
+      },
+      orientationConvention: "Orientació en la convenció del robot: ZYX, graus.",
+      frameLabel: "Frame cinta",
+      tcpLabel: "TCP",
+      validation: {
+        contactFaceRequired: "Selecciona la cara de la peça que està en contacte amb la cinta.",
+        invalidRotation: "La rotació sobre la cinta no és un número vàlid.",
+        invalidPlacement: "La col·locació sobre la cinta no és vàlida.",
+        invalidGrasp: "Els offsets i la rotació d'agafada han de ser números vàlids."
+      }
+    },
     pieceDialog: {
+      notInLibrary: "Aquesta peça no és a la biblioteca de peces.",
+      saveToLibrary: "Guardar-la a la biblioteca amb aquest nom",
+      nameInUse: (name) => "Ja hi ha una altra peça a la biblioteca que es diu «" + name + "». Tria un altre nom.",
+      saveError: "No s'ha pogut guardar la biblioteca de peces.",
+      editTitle: "Editar peça", editSubtitle: "Modifica el nom de la peça.", saveChanges: "Guardar canvis",
       title: "Nova peça",
       subtitle: "Defineix una geometria o importa un model 3D.",
       library: "Biblioteca de peces",
@@ -170,6 +249,8 @@ const translations = {
       }
     },
     pieces: {
+      duplicateSpacing: "Distància entre còpies",
+      edit: "Editar",
       title: "CONFIGURADOR PECES",
       new: "Nova peça",
       duplicate: "Duplicar",
@@ -180,6 +261,9 @@ const translations = {
     },
     separatorDialog: {
       title: "Nou separador",
+      editTitle: "Editar separador",
+      editSubtitle: "Modifica el nom, les mides i el color del separador seleccionat.",
+      saveChanges: "Guardar canvis",
       subtitle: "Separador rectangular amb referència TCP fixa a TOP_CENTER.",
       close: "Tancar",
       library: "Biblioteca de separadors",
@@ -227,6 +311,7 @@ const translations = {
       robotTcp: "Referència TCP Robot",
       contactFace: "Cara contacte",
       orientation: "Orientació referència",
+      advancedOptions: "Opcions avançades",
       faceOffsetX: "Face Offset X",
       faceOffsetY: "Face Offset Y",
       faceRotation: "Face Rotation",
@@ -244,6 +329,9 @@ const translations = {
       }
     },
     layer: {
+      palletizingMode: "Paletitzat", depalletizingMode: "Despaletitzat",
+      defineIds: "Definir ID's", defineIdsTitle: "Tornar a definir els ID's", defineIdsWarning: "Totes les peces ja tenen ID. Si continues, s'esborraran els ID actuals i els hauràs de tornar a definir clicant les peces una a una.", defineIdsConfirm: "Esborrar i definir", defineIdsReverse: "Invertir ordre ID's", defineGrasps: "Definir agafades múltiples", graspStartHint: "Clica la peça guia de l'agafada · Esc per sortir", graspDraftHint: "Clica peces per afegir-les o treure-les · Intro confirma · Esc cancel·la", graspCount: (n) => "Agafada de " + n + " peces", graspAdjust: "Ajust del TCP", graspConfirm: "Confirmar", graspDissolve: "Desfer agafada", graspNeedsGripper: "Cal aplicar una pinça per definir agafades.", graspNeedsZone: "Aquesta pinça importada no té zona d'agafada. Defineix-la al configurador de gripper.", graspMinPieces: "Calen almenys dues peces per fer una agafada.", graspOtherGroup: "Aquesta peça ja és d'una altra agafada.", graspReviewTitle: "Agafades a revisar", graspReview: (id) => "Agafada " + id, graspIssues: { OUTSIDE_ZONE: (n) => n + ": fora de la zona d'agafada", HEIGHT: (n) => n + ": la cara agafada no és a la mateixa altura", ORIENTATION: (n) => n + ": orientació diferent de la peça guia", SEPARATOR: (n) => n + ": els separadors no es poden agrupar", NO_ZONE: () => "La pinça no té zona d'agafada", NO_GRIPPER: () => "No hi ha cap pinça aplicada" }, defineIdsHint: (done, total) => "Clica les peces en ordre de col·locació · " + done + "/" + total + " · Esc per acabar",
+      simulate: (name) => "Simular la capa " + name, simulationNeedsGripper: "Cal aplicar una pinça per simular la capa.", simulationHint: "Simulant la capa · prem Esc per sortir",
       title: "CONFIGURADOR DE CAPES",
       newEmpty: "Nova capa buida",
       save: "Guardar capa",
@@ -280,9 +368,11 @@ const translations = {
     gripperOffsets: {
       generic: "Offsets genèrics", piece: (id) => "Offsets peça ID " + id,
       custom: "Aquesta peça utilitza offsets personalitzats.", inherited: "Aquesta peça hereta els offsets genèrics.",
-      approach: "Offset aproximació", retreat: "Offset allunyament", useGeneric: "Utilitzar offsets genèrics"
+      approach: "Offset aproximació", retreat: "Offset allunyament", useGeneric: "Utilitzar offsets genèrics",
+      simulateApproach: "Simular aproximació", simulateRetreat: "Simular allunyament", simulationNeedsGripper: "Cal aplicar una pinça per simular el moviment.", simulationHint: "Simulació activa · prem Esc per sortir"
     },
     palletizing: {
+      sendValues: "Enviar valors",
       title: "CONFIGURADOR PALETITZAT",
       availableLayers: "Capes disponibles",
       saveLayerFirst: "Primer has de guardar una capa.",
@@ -315,11 +405,13 @@ const translations = {
   },
   es: {
     project: {
+      autosaveFailed: "No se ha podido guardar la copia de recuperación (el almacenamiento del navegador está lleno). Guarda el proyecto para no perder los cambios.",
       unnamed: "Proyecto sin nombre",
       recovered: "Proyecto recuperado",
       saved: "Proyecto guardado",
       unsavedChanges: "Cambios sin guardar"
     },
+    transfer: { importTitle: "Importar un proyecto", importedSuffix: "(importado)", invalidFile: "Este archivo no es un proyecto ni una copia de seguridad de MiquelPal.", importError: "No se ha podido importar el archivo.", exportError: "No se ha podido exportar.", backupTitle: "Importar una copia de seguridad", backupMessage: "Se añadirán los proyectos, las bibliotecas y los modelos 3D de la copia que aún no estén. No se borrará ni se sustituirá nada. Al terminar, el programa se volverá a cargar.", backupConfirm: "Importar", backupDone: ({ projectCount, itemCount, modelCount }) => `Copia importada: ${projectCount} proyectos, ${itemCount - projectCount} elementos de biblioteca y ${modelCount} modelos 3D nuevos.` },
     projectMenu: {
       title: "Proyecto",
       saved: "Proyecto guardado",
@@ -327,7 +419,8 @@ const translations = {
       newProject: "Nuevo proyecto",
       openProject: "Abrir proyecto",
       save: "Guardar",
-      saveAs: "Guardar como..."
+      saveAs: "Guardar como...",
+      exportProject: "Exportar proyecto...", importFile: "Importar archivo...", exportBackup: "Copia de seguridad..."
     },
     palletDialog: {
       configure: "Configurar palé",
@@ -346,7 +439,6 @@ const translations = {
       color: "Color",
       saveCharacteristics: "Guardar nombre y características",
       preview3D: "Vista previa 3D",
-      surfaceHelp: "La superficie superior siempre corresponde a Z WORLD = 0.",
       applyPallet: "Aplicar palé",
       invalidDimensions: "Las dimensiones X, Y y Z deben ser números superiores a cero.",
       nameRequired: "Debes escribir un nombre antes de guardar el palé.",
@@ -377,7 +469,7 @@ const translations = {
       offsetX: "Desplazar X",
       offsetY: "Desplazar Y",
       robotFront: "Frente del robot",
-      localTcp: "TCP local",
+      localTcp: "TCP local", activeZone: "Zona de agarre", zoneSizeX: "Tamaño X", zoneSizeY: "Tamaño Y", zoneCenterX: "Centro X", zoneCenterY: "Centro Y", zoneAuto: "Automática",
       selectTcp: "Seleccionar TCP sobre el modelo",
       selectingTcp: "Seleccionando TCP...",
       position: "Pos",
@@ -397,7 +489,83 @@ const translations = {
       modelImported: "Modelo importado. Haz clic sobre la superficie para definir el TCP.",
       tcpDefined: "TCP definido. Ajusta la posición o la orientación si es necesario."
     },
+    conveyorConfigurator: {
+      close: "Cerrar",
+      title: "CONFIGURADOR CINTA",
+      search: "Buscar pieza…",
+      noPieces: "Todavía no hay ninguna pieza en el palé. Las piezas aparecen aquí cuando las colocas en alguna capa.",
+      noResults: "Ninguna pieza coincide con la búsqueda.",
+      states: { configured: "Configurada", notConfigured: "Sin configurar", needsReview: "Necesita revisión", notSaved: "No guardada en la biblioteca", templateMissing: "Plantilla eliminada" },
+      saveAndConfigure: "Guardar y configurar",
+      configure: "Configurar",
+      edit: "Editar",
+      review: "Revisar",
+      delete: "Eliminar",
+      dialogTitle: "Configuración de cinta",
+      pieceInfoTitle: "Pieza",
+      geometryChangedWarning: "La geometría de la pieza ha cambiado desde que se calculó esta configuración. Revisa la cara de contacto y la cara de agarre antes de guardar.",
+      confirmReview: "He revisado las caras",
+      migrationWarning: "Este proyecto tenía varias configuraciones para esta pieza y no se ha podido saber cuál era la más reciente. Revisa esta y guárdala: las demás se descartarán.",
+      missingTitle: "Para guardar falta:",
+      missing: {
+        beltWidth: "ancho de la cinta válido",
+        review: "revisar la geometría",
+        contactFace: "cara de contacto",
+        graspFace: "cara de agarre",
+        invalidGrasp: "un agarre válido",
+        tcp: "TCP válido"
+      },
+      save: "Guardar",
+      deleteTitle: "Eliminar configuración de cinta",
+      deleteMessage: (name) => "¿Quieres eliminar la configuración de cinta de «" + name + "»? Esta acción no eliminará la pieza.",
+      deletePieceTitle: "Eliminar pieza",
+      deletePieceMessage: (name) => "La pieza «" + name + "» tiene una configuración de cinta. Si la eliminas, también se eliminará su configuración de cinta. ¿Quieres continuar?",
+      deletePieceConfirm: "Eliminar pieza y configuración"
+    },
+    conveyor: {
+      beltWidth: "Ancho de la cinta",
+      beltWidthHelp: "Común para todas las piezas y proyectos. La pieza queda centrada en medio de la cinta.",
+      tcpNeedsReview: "Hay que revisar la pieza", tcpGeometryChanged: "Geometría modificada", frameZUp: "Frame de la cinta, Z hacia arriba",
+      sectionTitle: "Colocación sobre la cinta",
+      contactFace: "Cara en contacto con la cinta",
+      selectContactFace: "Selecciona una cara…",
+      contactFaceHelp: "Haz clic en una cara de la pieza en el visor o elígela en la lista.",
+      faceNumber: (number) => "Cara " + number,
+      rotation: "Rotación sobre la cinta",
+      noGripper: "Crea una pinza en el configurador de pinza para poder verla aquí.",
+      graspTitle: "Agarre del robot",
+      graspFace: "Cara de agarre",
+      tcpTitle: "TCP respecto al frame de la cinta",
+      tcpValid: "TCP calculado",
+      tcpIncomplete: "Configuración incompleta",
+      tcpError: "No se ha podido calcular el TCP",
+      reasons: {
+        graspFromBelow: "la cara de agarre solo se puede agarrar desde debajo de la cinta",
+        beltTooNarrow: "la pieza no cabe en el ancho de la cinta",
+        missingPiece: "falta seleccionar la pieza", geometryChanged: "la geometría de la pieza ha cambiado", notCalculated: "todavía no se ha calculado",
+        missingContactFace: "falta la cara en contacto con la cinta",
+        missingGraspFace: "falta la cara de agarre",
+        geometryNotLoaded: "la geometría todavía no está cargada",
+        unknownContactFace: "la cara de contacto ya no existe",
+        invalidGraspOffsets: "los offsets de agarre no son válidos",
+        invalidTransform: "la transformación no se puede calcular"
+      },
+      orientationConvention: "Orientación en la convención del robot: ZYX, grados.",
+      frameLabel: "Frame cinta",
+      tcpLabel: "TCP",
+      validation: {
+        contactFaceRequired: "Selecciona la cara de la pieza que está en contacto con la cinta.",
+        invalidRotation: "La rotación sobre la cinta no es un número válido.",
+        invalidPlacement: "La colocación sobre la cinta no es válida.",
+        invalidGrasp: "Los offsets y la rotación de agarre deben ser números válidos."
+      }
+    },
     pieceDialog: {
+      notInLibrary: "Esta pieza no está en la biblioteca de piezas.",
+      saveToLibrary: "Guardarla en la biblioteca con este nombre",
+      nameInUse: (name) => "Ya hay otra pieza en la biblioteca que se llama «" + name + "». Elige otro nombre.",
+      saveError: "No se ha podido guardar la biblioteca de piezas.",
+      editTitle: "Editar pieza", editSubtitle: "Modifica el nombre de la pieza.", saveChanges: "Guardar cambios",
       title: "Nueva pieza",
       subtitle: "Define una geometría o importa un modelo 3D.",
       library: "Biblioteca de piezas",
@@ -435,6 +603,8 @@ const translations = {
       }
     },
     pieces: {
+      duplicateSpacing: "Distancia entre copias",
+      edit: "Editar",
       title: "CONFIGURADOR DE PIEZAS",
       new: "Nueva pieza",
       duplicate: "Duplicar",
@@ -445,6 +615,9 @@ const translations = {
     },
     separatorDialog: {
       title: "Nuevo separador",
+      editTitle: "Editar separador",
+      editSubtitle: "Modifica el nombre, las medidas y el color del separador seleccionado.",
+      saveChanges: "Guardar cambios",
       subtitle: "Separador rectangular con referencia TCP fija en TOP_CENTER.",
       close: "Cerrar",
       library: "Biblioteca de separadores",
@@ -480,6 +653,9 @@ const translations = {
       position: "Posición del separador"
     },
     layer: {
+      palletizingMode: "Paletizado", depalletizingMode: "Despaletizado",
+      defineIds: "Definir IDs", defineIdsTitle: "Volver a definir los IDs", defineIdsWarning: "Todas las piezas ya tienen ID. Si continúas, se borrarán los IDs actuales y tendrás que volver a definirlos haciendo clic en las piezas una a una.", defineIdsConfirm: "Borrar y definir", defineIdsReverse: "Invertir orden IDs", defineGrasps: "Definir agarres múltiples", graspStartHint: "Haz clic en la pieza guía del agarre · Esc para salir", graspDraftHint: "Haz clic en piezas para añadirlas o quitarlas · Intro confirma · Esc cancela", graspCount: (n) => "Agarre de " + n + " piezas", graspAdjust: "Ajuste del TCP", graspConfirm: "Confirmar", graspDissolve: "Deshacer agarre", graspNeedsGripper: "Hay que aplicar una pinza para definir agarres.", graspNeedsZone: "Esta pinza importada no tiene zona de agarre. Defínela en el configurador de gripper.", graspMinPieces: "Se necesitan al menos dos piezas para un agarre.", graspOtherGroup: "Esta pieza ya pertenece a otro agarre.", graspReviewTitle: "Agarres a revisar", graspReview: (id) => "Agarre " + id, graspIssues: { OUTSIDE_ZONE: (n) => n + ": fuera de la zona de agarre", HEIGHT: (n) => n + ": la cara de agarre no está a la misma altura", ORIENTATION: (n) => n + ": orientación distinta de la pieza guía", SEPARATOR: (n) => n + ": los separadores no se pueden agrupar", NO_ZONE: () => "La pinza no tiene zona de agarre", NO_GRIPPER: () => "No hay ninguna pinza aplicada" }, defineIdsHint: (done, total) => "Haz clic en las piezas en orden de colocación · " + done + "/" + total + " · Esc para terminar",
+      simulate: (name) => "Simular la capa " + name, simulationNeedsGripper: "Hay que aplicar una pinza para simular la capa.", simulationHint: "Simulando la capa · pulsa Esc para salir",
       title: "CONFIGURADOR DE CAPAS",
       newEmpty: "Nueva capa vacía",
       save: "Guardar capa",
@@ -508,6 +684,7 @@ const translations = {
       robotTcp: "Referencia TCP del robot",
       contactFace: "Cara de contacto",
       orientation: "Orientación de referencia",
+      advancedOptions: "Opciones avanzadas",
       faceOffsetX: "Face Offset X",
       faceOffsetY: "Face Offset Y",
       faceRotation: "Face Rotation",
@@ -536,9 +713,11 @@ const translations = {
     gripperOffsets: {
       generic: "Offsets genéricos", piece: (id) => "Offsets de pieza ID " + id,
       custom: "Esta pieza utiliza offsets personalizados.", inherited: "Esta pieza hereda los offsets genéricos.",
-      approach: "Offset de aproximación", retreat: "Offset de retirada", useGeneric: "Utilizar offsets genéricos"
+      approach: "Offset de aproximación", retreat: "Offset de retirada", useGeneric: "Utilizar offsets genéricos",
+      simulateApproach: "Simular aproximación", simulateRetreat: "Simular retirada", simulationNeedsGripper: "Hay que aplicar una pinza para simular el movimiento.", simulationHint: "Simulación activa · pulsa Esc para salir"
     },
     palletizing: {
+      sendValues: "Enviar valores",
       title: "CONFIGURADOR DE PALETIZADO",
       availableLayers: "Capas disponibles",
       saveLayerFirst: "Primero debes guardar una capa.",
@@ -568,17 +747,20 @@ const translations = {
       pallet: "Configurador de palé",
       pieces: "Configurador de piezas",
       separators: "Configurador de separadores",
+      conveyor: "Configurador de cinta",
       layers: "Configurador de capas",
       palletizing: "Configurador de paletizado"
     }
   },
   en: {
     project: {
+      autosaveFailed: "The recovery copy could not be saved (browser storage is full). Save the project so you do not lose your changes.",
       unnamed: "Untitled project",
       recovered: "Recovered project",
       saved: "Project saved",
       unsavedChanges: "Unsaved changes"
     },
+    transfer: { importTitle: "Import a project", importedSuffix: "(imported)", invalidFile: "This file is not a MiquelPal project or backup.", importError: "The file could not be imported.", exportError: "The export failed.", backupTitle: "Import a backup", backupMessage: "Projects, libraries and 3D models from the backup that are not here yet will be added. Nothing will be deleted or replaced. When it finishes, the program will reload.", backupConfirm: "Import", backupDone: ({ projectCount, itemCount, modelCount }) => `Backup imported: ${projectCount} projects, ${itemCount - projectCount} library items and ${modelCount} new 3D models.` },
     projectMenu: {
       title: "Project",
       saved: "Project saved",
@@ -586,7 +768,8 @@ const translations = {
       newProject: "New project",
       openProject: "Open project",
       save: "Save",
-      saveAs: "Save as..."
+      saveAs: "Save as...",
+      exportProject: "Export project...", importFile: "Import file...", exportBackup: "Backup..."
     },
     palletDialog: {
       configure: "Configure pallet",
@@ -605,7 +788,6 @@ const translations = {
       color: "Color",
       saveCharacteristics: "Save name and characteristics",
       preview3D: "3D preview",
-      surfaceHelp: "The top surface always corresponds to Z WORLD = 0.",
       applyPallet: "Apply pallet",
       invalidDimensions: "Dimensions X, Y and Z must be numbers greater than zero.",
       nameRequired: "Enter a name before saving the pallet.",
@@ -636,7 +818,7 @@ const translations = {
       offsetX: "Offset X",
       offsetY: "Offset Y",
       robotFront: "Robot Front",
-      localTcp: "Local TCP",
+      localTcp: "Local TCP", activeZone: "Grip zone", zoneSizeX: "Size X", zoneSizeY: "Size Y", zoneCenterX: "Centre X", zoneCenterY: "Centre Y", zoneAuto: "Automatic",
       selectTcp: "Select TCP on the model",
       selectingTcp: "Selecting TCP...",
       position: "Pos",
@@ -656,7 +838,83 @@ const translations = {
       modelImported: "Model imported. Click the surface to define the TCP.",
       tcpDefined: "TCP defined. Adjust its position or orientation if necessary."
     },
+    conveyorConfigurator: {
+      close: "Close",
+      title: "CONVEYOR CONFIGURATOR",
+      search: "Search piece…",
+      noPieces: "There are no pieces on the pallet yet. Pieces appear here when you place them in a layer.",
+      noResults: "No piece matches the search.",
+      states: { configured: "Configured", notConfigured: "Not configured", needsReview: "Needs review", notSaved: "Not saved in the library", templateMissing: "Template deleted" },
+      saveAndConfigure: "Save and configure",
+      configure: "Configure",
+      edit: "Edit",
+      review: "Review",
+      delete: "Delete",
+      dialogTitle: "Conveyor configuration",
+      pieceInfoTitle: "Piece",
+      geometryChangedWarning: "The piece geometry has changed since this configuration was calculated. Check the contact face and the grasp face before saving.",
+      confirmReview: "I have checked the faces",
+      migrationWarning: "This project had several configurations for this piece and the most recent one could not be determined. Review this one and save it: the others will be discarded.",
+      missingTitle: "Missing to save:",
+      missing: {
+        beltWidth: "a valid conveyor width",
+        review: "review the geometry",
+        contactFace: "contact face",
+        graspFace: "grasp face",
+        invalidGrasp: "a valid grasp",
+        tcp: "valid TCP"
+      },
+      save: "Save",
+      deleteTitle: "Delete conveyor configuration",
+      deleteMessage: (name) => "Do you want to delete the conveyor configuration of “" + name + "”? This action will not delete the piece.",
+      deletePieceTitle: "Delete piece",
+      deletePieceMessage: (name) => "The piece “" + name + "” has a conveyor configuration. If you delete it, its conveyor configuration will also be deleted. Do you want to continue?",
+      deletePieceConfirm: "Delete piece and configuration"
+    },
+    conveyor: {
+      beltWidth: "Conveyor width",
+      beltWidthHelp: "Shared by all pieces and projects. The piece is centred on the conveyor.",
+      tcpNeedsReview: "The piece needs review", tcpGeometryChanged: "Geometry modified", frameZUp: "Conveyor frame, Z up",
+      sectionTitle: "Placement on the conveyor",
+      contactFace: "Face in contact with the conveyor",
+      selectContactFace: "Select a face…",
+      contactFaceHelp: "Click a face of the piece in the viewer or choose it from the list.",
+      faceNumber: (number) => "Face " + number,
+      rotation: "Rotation on the conveyor",
+      noGripper: "Create a gripper in the gripper configurator to see it here.",
+      graspTitle: "Robot grasp",
+      graspFace: "Grasp face",
+      tcpTitle: "TCP relative to the conveyor frame",
+      tcpValid: "TCP calculated",
+      tcpIncomplete: "Incomplete configuration",
+      tcpError: "The TCP could not be calculated",
+      reasons: {
+        graspFromBelow: "the grasp face can only be reached from below the conveyor",
+        beltTooNarrow: "the piece does not fit the conveyor width",
+        missingPiece: "no piece selected", geometryChanged: "the piece geometry has changed", notCalculated: "not calculated yet",
+        missingContactFace: "the face in contact with the conveyor is missing",
+        missingGraspFace: "the grasp face is missing",
+        geometryNotLoaded: "the geometry is not loaded yet",
+        unknownContactFace: "the contact face no longer exists",
+        invalidGraspOffsets: "the grasp offsets are not valid",
+        invalidTransform: "the transformation cannot be calculated"
+      },
+      orientationConvention: "Orientation in the robot convention: ZYX, degrees.",
+      frameLabel: "Conveyor frame",
+      tcpLabel: "TCP",
+      validation: {
+        contactFaceRequired: "Select the face of the piece that is in contact with the conveyor.",
+        invalidRotation: "The rotation on the conveyor is not a valid number.",
+        invalidPlacement: "The placement on the conveyor is not valid.",
+        invalidGrasp: "The grasp offsets and rotation must be valid numbers."
+      }
+    },
     pieceDialog: {
+      notInLibrary: "This piece is not in the piece library.",
+      saveToLibrary: "Save it to the library with this name",
+      nameInUse: (name) => "There is already another piece in the library called “" + name + "”. Choose a different name.",
+      saveError: "The piece library could not be saved.",
+      editTitle: "Edit piece", editSubtitle: "Edit the name of the piece.", saveChanges: "Save changes",
       title: "New piece",
       subtitle: "Define a geometry or import a 3D model.",
       library: "Piece library",
@@ -694,6 +952,8 @@ const translations = {
       }
     },
     pieces: {
+      duplicateSpacing: "Spacing between copies",
+      edit: "Edit",
       title: "PIECE CONFIGURATOR",
       new: "New piece",
       duplicate: "Duplicate",
@@ -704,6 +964,9 @@ const translations = {
     },
     separatorDialog: {
       title: "New separator",
+      editTitle: "Edit separator",
+      editSubtitle: "Edit the name, dimensions and color of the selected separator.",
+      saveChanges: "Save changes",
       subtitle: "Rectangular separator with a fixed TCP reference at TOP_CENTER.",
       close: "Close",
       library: "Separator library",
@@ -739,6 +1002,9 @@ const translations = {
       position: "Separator position"
     },
     layer: {
+      palletizingMode: "Palletizing", depalletizingMode: "Depalletizing",
+      defineIds: "Define IDs", defineIdsTitle: "Redefine IDs", defineIdsWarning: "All pieces already have an ID. If you continue, the current IDs will be cleared and you will have to define them again by clicking the pieces one by one.", defineIdsConfirm: "Clear and define", defineIdsReverse: "Reverse ID order", defineGrasps: "Define multiple grasps", graspStartHint: "Click the lead piece of the grasp · Esc to exit", graspDraftHint: "Click pieces to add or remove them · Enter confirms · Esc cancels", graspCount: (n) => "Grasp of " + n + " pieces", graspAdjust: "TCP adjustment", graspConfirm: "Confirm", graspDissolve: "Undo grasp", graspNeedsGripper: "Apply a gripper to define grasps.", graspNeedsZone: "This imported gripper has no grip zone. Define it in the gripper configurator.", graspMinPieces: "A grasp needs at least two pieces.", graspOtherGroup: "This piece already belongs to another grasp.", graspReviewTitle: "Grasps to review", graspReview: (id) => "Grasp " + id, graspIssues: { OUTSIDE_ZONE: (n) => n + ": outside the grip zone", HEIGHT: (n) => n + ": grasp face is not at the same height", ORIENTATION: (n) => n + ": orientation differs from the lead piece", SEPARATOR: (n) => n + ": separators cannot be grouped", NO_ZONE: () => "The gripper has no grip zone", NO_GRIPPER: () => "No gripper applied" }, defineIdsHint: (done, total) => "Click the pieces in placement order · " + done + "/" + total + " · Esc to finish",
+      simulate: (name) => "Simulate layer " + name, simulationNeedsGripper: "Apply a gripper to simulate the layer.", simulationHint: "Simulating layer · press Esc to exit",
       title: "LAYER CONFIGURATOR",
       newEmpty: "New empty layer",
       save: "Save layer",
@@ -767,6 +1033,7 @@ const translations = {
       robotTcp: "Robot TCP reference",
       contactFace: "Contact face",
       orientation: "Reference orientation",
+      advancedOptions: "Advanced options",
       faceOffsetX: "Face Offset X",
       faceOffsetY: "Face Offset Y",
       faceRotation: "Face Rotation",
@@ -795,9 +1062,11 @@ const translations = {
     gripperOffsets: {
       generic: "Generic offsets", piece: (id) => "Piece ID offsets " + id,
       custom: "This piece uses custom offsets.", inherited: "This piece inherits the generic offsets.",
-      approach: "Approach offset", retreat: "Retreat offset", useGeneric: "Use generic offsets"
+      approach: "Approach offset", retreat: "Retreat offset", useGeneric: "Use generic offsets",
+      simulateApproach: "Simulate approach", simulateRetreat: "Simulate retreat", simulationNeedsGripper: "Apply a gripper to simulate the movement.", simulationHint: "Simulation running · press Esc to exit"
     },
     palletizing: {
+      sendValues: "Send values",
       title: "PALLETIZING CONFIGURATOR",
       availableLayers: "Available layers",
       saveLayerFirst: "You must save a layer first.",
@@ -827,17 +1096,20 @@ const translations = {
       pallet: "Pallet configurator",
       pieces: "Piece configurator",
       separators: "Separator configurator",
+      conveyor: "Conveyor configurator",
       layers: "Layer configurator",
       palletizing: "Palletizing configurator"
     }
   },
   fr: {
     project: {
+      autosaveFailed: "La copie de récupération n’a pas pu être enregistrée (le stockage du navigateur est plein). Enregistrez le projet pour ne pas perdre vos modifications.",
       unnamed: "Projet sans nom",
       recovered: "Projet récupéré",
       saved: "Projet enregistré",
       unsavedChanges: "Modifications non enregistrées"
     },
+    transfer: { importTitle: "Importer un projet", importedSuffix: "(importé)", invalidFile: "Ce fichier n’est ni un projet ni une sauvegarde MiquelPal.", importError: "Le fichier n’a pas pu être importé.", exportError: "L’exportation a échoué.", backupTitle: "Importer une sauvegarde", backupMessage: "Les projets, bibliothèques et modèles 3D de la sauvegarde qui ne sont pas encore présents seront ajoutés. Rien ne sera supprimé ni remplacé. À la fin, le programme sera rechargé.", backupConfirm: "Importer", backupDone: ({ projectCount, itemCount, modelCount }) => `Sauvegarde importée : ${projectCount} projets, ${itemCount - projectCount} éléments de bibliothèque et ${modelCount} nouveaux modèles 3D.` },
     projectMenu: {
       title: "Projet",
       saved: "Projet enregistré",
@@ -845,7 +1117,8 @@ const translations = {
       newProject: "Nouveau projet",
       openProject: "Ouvrir un projet",
       save: "Enregistrer",
-      saveAs: "Enregistrer sous..."
+      saveAs: "Enregistrer sous...",
+      exportProject: "Exporter le projet...", importFile: "Importer un fichier...", exportBackup: "Sauvegarde..."
     },
     palletDialog: {
       configure: "Configurer la palette",
@@ -864,7 +1137,6 @@ const translations = {
       color: "Couleur",
       saveCharacteristics: "Enregistrer le nom et les caractéristiques",
       preview3D: "Aperçu 3D",
-      surfaceHelp: "La surface supérieure correspond toujours à Z WORLD = 0.",
       applyPallet: "Appliquer la palette",
       invalidDimensions: "Les dimensions X, Y et Z doivent être des nombres supérieurs à zéro.",
       nameRequired: "Saisissez un nom avant d'enregistrer la palette.",
@@ -895,7 +1167,7 @@ const translations = {
       offsetX: "Décalage X",
       offsetY: "Décalage Y",
       robotFront: "Face avant du robot",
-      localTcp: "TCP local",
+      localTcp: "TCP local", activeZone: "Zone de prise", zoneSizeX: "Taille X", zoneSizeY: "Taille Y", zoneCenterX: "Centre X", zoneCenterY: "Centre Y", zoneAuto: "Automatique",
       selectTcp: "Sélectionner le TCP sur le modèle",
       selectingTcp: "Sélection du TCP...",
       position: "Pos",
@@ -915,7 +1187,83 @@ const translations = {
       modelImported: "Modèle importé. Cliquez sur la surface pour définir le TCP.",
       tcpDefined: "TCP défini. Ajustez sa position ou son orientation si nécessaire."
     },
+    conveyorConfigurator: {
+      close: "Fermer",
+      title: "CONFIGURATEUR CONVOYEUR",
+      search: "Rechercher une pièce…",
+      noPieces: "Il n’y a encore aucune pièce sur la palette. Les pièces apparaissent ici lorsque vous les placez dans une couche.",
+      noResults: "Aucune pièce ne correspond à la recherche.",
+      states: { configured: "Configurée", notConfigured: "Non configurée", needsReview: "À réviser", notSaved: "Non enregistrée dans la bibliothèque", templateMissing: "Modèle supprimé" },
+      saveAndConfigure: "Enregistrer et configurer",
+      configure: "Configurer",
+      edit: "Modifier",
+      review: "Réviser",
+      delete: "Supprimer",
+      dialogTitle: "Configuration du convoyeur",
+      pieceInfoTitle: "Pièce",
+      geometryChangedWarning: "La géométrie de la pièce a changé depuis le calcul de cette configuration. Vérifiez la face de contact et la face de préhension avant d'enregistrer.",
+      confirmReview: "J'ai vérifié les faces",
+      migrationWarning: "Ce projet contenait plusieurs configurations pour cette pièce et la plus récente n'a pas pu être déterminée. Vérifiez celle-ci et enregistrez-la : les autres seront supprimées.",
+      missingTitle: "Pour enregistrer, il manque :",
+      missing: {
+        beltWidth: "une largeur de convoyeur valide",
+        review: "vérifier la géométrie",
+        contactFace: "face de contact",
+        graspFace: "face de préhension",
+        invalidGrasp: "une préhension valide",
+        tcp: "TCP valide"
+      },
+      save: "Enregistrer",
+      deleteTitle: "Supprimer la configuration du convoyeur",
+      deleteMessage: (name) => "Voulez-vous supprimer la configuration du convoyeur de « " + name + " » ? Cette action ne supprimera pas la pièce.",
+      deletePieceTitle: "Supprimer la pièce",
+      deletePieceMessage: (name) => "La pièce « " + name + " » a une configuration de convoyeur. Si vous la supprimez, sa configuration de convoyeur sera aussi supprimée. Voulez-vous continuer ?",
+      deletePieceConfirm: "Supprimer la pièce et la configuration"
+    },
+    conveyor: {
+      beltWidth: "Largeur du convoyeur",
+      beltWidthHelp: "Commune à toutes les pièces et à tous les projets. La pièce est centrée sur le convoyeur.",
+      tcpNeedsReview: "La pièce doit être vérifiée", tcpGeometryChanged: "Géométrie modifiée", frameZUp: "Repère du convoyeur, Z vers le haut",
+      sectionTitle: "Placement sur le convoyeur",
+      contactFace: "Face en contact avec le convoyeur",
+      selectContactFace: "Sélectionnez une face…",
+      contactFaceHelp: "Cliquez sur une face de la pièce dans la visionneuse ou choisissez-la dans la liste.",
+      faceNumber: (number) => "Face " + number,
+      rotation: "Rotation sur le convoyeur",
+      noGripper: "Créez un préhenseur dans le configurateur de préhenseur pour le voir ici.",
+      graspTitle: "Préhension du robot",
+      graspFace: "Face de préhension",
+      tcpTitle: "TCP par rapport au repère du convoyeur",
+      tcpValid: "TCP calculé",
+      tcpIncomplete: "Configuration incomplète",
+      tcpError: "Impossible de calculer le TCP",
+      reasons: {
+        graspFromBelow: "la face de préhension n'est accessible que par-dessous le convoyeur",
+        beltTooNarrow: "la pièce ne tient pas dans la largeur du convoyeur",
+        missingPiece: "aucune pièce sélectionnée", geometryChanged: "la géométrie de la pièce a changé", notCalculated: "pas encore calculé",
+        missingContactFace: "la face en contact avec le convoyeur manque",
+        missingGraspFace: "la face de préhension manque",
+        geometryNotLoaded: "la géométrie n’est pas encore chargée",
+        unknownContactFace: "la face de contact n’existe plus",
+        invalidGraspOffsets: "les décalages de préhension ne sont pas valides",
+        invalidTransform: "la transformation ne peut pas être calculée"
+      },
+      orientationConvention: "Orientation dans la convention du robot : ZYX, degrés.",
+      frameLabel: "Repère convoyeur",
+      tcpLabel: "TCP",
+      validation: {
+        contactFaceRequired: "Sélectionnez la face de la pièce en contact avec le convoyeur.",
+        invalidRotation: "La rotation sur le convoyeur n’est pas un nombre valide.",
+        invalidPlacement: "Le placement sur le convoyeur n’est pas valide.",
+        invalidGrasp: "Les décalages et la rotation de préhension doivent être des nombres valides."
+      }
+    },
     pieceDialog: {
+      notInLibrary: "Cette pièce n’est pas dans la bibliothèque de pièces.",
+      saveToLibrary: "L’enregistrer dans la bibliothèque avec ce nom",
+      nameInUse: (name) => "Une autre pièce de la bibliothèque s’appelle déjà « " + name + " ». Choisissez un autre nom.",
+      saveError: "Impossible d'enregistrer la bibliothèque de pièces.",
+      editTitle: "Modifier la pièce", editSubtitle: "Modifiez le nom de la pièce.", saveChanges: "Enregistrer les modifications",
       title: "Nouvelle pièce",
       subtitle: "Définissez une géométrie ou importez un modèle 3D.",
       library: "Bibliothèque de pièces",
@@ -953,6 +1301,8 @@ const translations = {
       }
     },
     pieces: {
+      duplicateSpacing: "Espacement entre les copies",
+      edit: "Modifier",
       title: "CONFIGURATEUR DE PIÈCES",
       new: "Nouvelle pièce",
       duplicate: "Dupliquer",
@@ -963,6 +1313,9 @@ const translations = {
     },
     separatorDialog: {
       title: "Nouveau séparateur",
+      editTitle: "Modifier le séparateur",
+      editSubtitle: "Modifiez le nom, les dimensions et la couleur du séparateur sélectionné.",
+      saveChanges: "Enregistrer les modifications",
       subtitle: "Séparateur rectangulaire avec référence TCP fixe sur TOP_CENTER.",
       close: "Fermer",
       library: "Bibliothèque de séparateurs",
@@ -998,6 +1351,9 @@ const translations = {
       position: "Position du séparateur"
     },
     layer: {
+      palletizingMode: "Palettisation", depalletizingMode: "Dépalettisation",
+      defineIds: "Définir les ID", defineIdsTitle: "Redéfinir les ID", defineIdsWarning: "Toutes les pièces ont déjà un ID. Si vous continuez, les ID actuels seront effacés et vous devrez les redéfinir en cliquant sur les pièces une par une.", defineIdsConfirm: "Effacer et définir", defineIdsReverse: "Inverser l'ordre des ID", defineGrasps: "Définir les prises multiples", graspStartHint: "Cliquez la pièce guide de la prise · Échap pour sortir", graspDraftHint: "Cliquez des pièces pour les ajouter ou les retirer · Entrée confirme · Échap annule", graspCount: (n) => "Prise de " + n + " pièces", graspAdjust: "Ajustement du TCP", graspConfirm: "Confirmer", graspDissolve: "Défaire la prise", graspNeedsGripper: "Appliquez une pince pour définir des prises.", graspNeedsZone: "Cette pince importée n'a pas de zone de prise. Définissez-la dans le configurateur de pince.", graspMinPieces: "Une prise nécessite au moins deux pièces.", graspOtherGroup: "Cette pièce appartient déjà à une autre prise.", graspReviewTitle: "Prises à vérifier", graspReview: (id) => "Prise " + id, graspIssues: { OUTSIDE_ZONE: (n) => n + " : hors de la zone de prise", HEIGHT: (n) => n + " : la face de prise n'est pas à la même hauteur", ORIENTATION: (n) => n + " : orientation différente de la pièce guide", SEPARATOR: (n) => n + " : les intercalaires ne peuvent pas être groupés", NO_ZONE: () => "La pince n'a pas de zone de prise", NO_GRIPPER: () => "Aucune pince appliquée" }, defineIdsHint: (done, total) => "Cliquez sur les pièces dans l’ordre de pose · " + done + "/" + total + " · Échap pour terminer",
+      simulate: (name) => "Simuler la couche " + name, simulationNeedsGripper: "Appliquez un préhenseur pour simuler la couche.", simulationHint: "Simulation de la couche · appuyez sur Échap pour quitter",
       title: "CONFIGURATEUR DE COUCHES",
       newEmpty: "Nouvelle couche vide",
       save: "Enregistrer la couche",
@@ -1026,6 +1382,7 @@ const translations = {
       robotTcp: "Référence TCP du robot",
       contactFace: "Face de contact",
       orientation: "Orientation de référence",
+      advancedOptions: "Options avancées",
       faceOffsetX: "Face Offset X",
       faceOffsetY: "Face Offset Y",
       faceRotation: "Face Rotation",
@@ -1054,9 +1411,11 @@ const translations = {
     gripperOffsets: {
       generic: "Décalages génériques", piece: (id) => "Décalages de la pièce ID " + id,
       custom: "Cette pièce utilise des décalages personnalisés.", inherited: "Cette pièce hérite des décalages génériques.",
-      approach: "Décalage d’approche", retreat: "Décalage de retrait", useGeneric: "Utiliser les décalages génériques"
+      approach: "Décalage d’approche", retreat: "Décalage de retrait", useGeneric: "Utiliser les décalages génériques",
+      simulateApproach: "Simuler l’approche", simulateRetreat: "Simuler le retrait", simulationNeedsGripper: "Appliquez un préhenseur pour simuler le mouvement.", simulationHint: "Simulation en cours · appuyez sur Échap pour quitter"
     },
     palletizing: {
+      sendValues: "Envoyer les valeurs",
       title: "CONFIGURATEUR DE PALETTISATION",
       availableLayers: "Couches disponibles",
       saveLayerFirst: "Vous devez d’abord enregistrer une couche.",
@@ -1086,17 +1445,20 @@ const translations = {
       pallet: "Configurateur de palette",
       pieces: "Configurateur de pièces",
       separators: "Configurateur de séparateurs",
+      conveyor: "Configurateur de convoyeur",
       layers: "Configurateur de couches",
       palletizing: "Configurateur de palettisation"
     }
   },
   ar: {
     project: {
+      autosaveFailed: "تعذّر حفظ نسخة الاسترداد (مساحة تخزين المتصفح ممتلئة). احفظ المشروع حتى لا تفقد التغييرات.",
       unnamed: "مشروع بدون اسم",
       recovered: "مشروع مستعاد",
       saved: "تم حفظ المشروع",
       unsavedChanges: "تغييرات غير محفوظة"
     },
+    transfer: { importTitle: "استيراد مشروع", importedSuffix: "(مستورد)", invalidFile: "هذا الملف ليس مشروعًا ولا نسخة احتياطية من MiquelPal.", importError: "تعذر استيراد الملف.", exportError: "تعذر التصدير.", backupTitle: "استيراد نسخة احتياطية", backupMessage: "ستُضاف المشاريع والمكتبات والنماذج ثلاثية الأبعاد غير الموجودة بعد. لن يُحذف أو يُستبدل أي شيء. عند الانتهاء سيُعاد تحميل البرنامج.", backupConfirm: "استيراد", backupDone: ({ projectCount, itemCount, modelCount }) => `تم استيراد النسخة: ${projectCount} مشاريع، ${itemCount - projectCount} عناصر مكتبة و${modelCount} نماذج ثلاثية الأبعاد جديدة.` },
     projectMenu: {
       title: "المشروع",
       saved: "تم حفظ المشروع",
@@ -1104,7 +1466,8 @@ const translations = {
       newProject: "مشروع جديد",
       openProject: "فتح مشروع",
       save: "حفظ",
-      saveAs: "حفظ باسم..."
+      saveAs: "حفظ باسم...",
+      exportProject: "تصدير المشروع...", importFile: "استيراد ملف...", exportBackup: "نسخة احتياطية..."
     },
     palletDialog: {
       configure: "إعداد المنصة",
@@ -1123,7 +1486,6 @@ const translations = {
       color: "اللون",
       saveCharacteristics: "حفظ الاسم والخصائص",
       preview3D: "معاينة ثلاثية الأبعاد",
-      surfaceHelp: "يتوافق السطح العلوي دائمًا مع Z WORLD = 0.",
       applyPallet: "تطبيق المنصة",
       invalidDimensions: "يجب أن تكون الأبعاد X وY وZ أرقامًا أكبر من صفر.",
       nameRequired: "اكتب اسمًا قبل حفظ المنصة.",
@@ -1154,7 +1516,7 @@ const translations = {
       offsetX: "الإزاحة X",
       offsetY: "الإزاحة Y",
       robotFront: "واجهة الروبوت",
-      localTcp: "TCP المحلي",
+      localTcp: "TCP المحلي", activeZone: "منطقة الإمساك", zoneSizeX: "الحجم X", zoneSizeY: "الحجم Y", zoneCenterX: "المركز X", zoneCenterY: "المركز Y", zoneAuto: "تلقائي",
       selectTcp: "تحديد TCP على النموذج",
       selectingTcp: "جارٍ تحديد TCP...",
       position: "الموضع",
@@ -1174,7 +1536,83 @@ const translations = {
       modelImported: "تم استيراد النموذج. انقر على السطح لتحديد TCP.",
       tcpDefined: "تم تحديد TCP. اضبط الموضع أو الاتجاه عند الحاجة."
     },
+    conveyorConfigurator: {
+      close: "إغلاق",
+      title: "مُهيِّئ السير الناقل",
+      search: "البحث عن قطعة…",
+      noPieces: "لا توجد أي قطعة على المنصة بعد. تظهر القطع هنا عندما تضعها في إحدى الطبقات.",
+      noResults: "لا توجد قطعة تطابق البحث.",
+      states: { configured: "مُهيَّأة", notConfigured: "غير مُهيَّأة", needsReview: "تحتاج إلى مراجعة", notSaved: "غير محفوظة في المكتبة", templateMissing: "تم حذف القالب" },
+      saveAndConfigure: "حفظ وتهيئة",
+      configure: "تهيئة",
+      edit: "تعديل",
+      review: "مراجعة",
+      delete: "حذف",
+      dialogTitle: "إعداد السير الناقل",
+      pieceInfoTitle: "القطعة",
+      geometryChangedWarning: "تغيّرت هندسة القطعة منذ حساب هذا الإعداد. راجع وجه التلامس ووجه الإمساك قبل الحفظ.",
+      confirmReview: "راجعتُ الأوجه",
+      migrationWarning: "كان هذا المشروع يحتوي على عدة إعدادات لهذه القطعة ولم يمكن تحديد الأحدث. راجع هذا الإعداد واحفظه: سيتم تجاهل الإعدادات الأخرى.",
+      missingTitle: "ينقص للحفظ:",
+      missing: {
+        beltWidth: "عرض صالح للسير الناقل",
+        review: "مراجعة الهندسة",
+        contactFace: "وجه التلامس",
+        graspFace: "وجه الإمساك",
+        invalidGrasp: "إمساك صالح",
+        tcp: "TCP صالح"
+      },
+      save: "حفظ",
+      deleteTitle: "حذف إعداد السير الناقل",
+      deleteMessage: (name) => "هل تريد حذف إعداد السير الناقل للقطعة «" + name + "»؟ لن يحذف هذا الإجراء القطعة.",
+      deletePieceTitle: "حذف القطعة",
+      deletePieceMessage: (name) => "القطعة «" + name + "» لديها إعداد سير ناقل. إذا حذفتها، فسيُحذف أيضًا إعداد السير الناقل الخاص بها. هل تريد المتابعة؟",
+      deletePieceConfirm: "حذف القطعة والإعداد"
+    },
+    conveyor: {
+      beltWidth: "عرض السير الناقل",
+      beltWidthHelp: "مشترك بين جميع القطع والمشاريع. توضع القطعة في منتصف السير الناقل.",
+      tcpNeedsReview: "يجب مراجعة القطعة", tcpGeometryChanged: "تم تعديل الشكل الهندسي", frameZUp: "إطار السير الناقل، Z إلى الأعلى",
+      sectionTitle: "الوضع على السير الناقل",
+      contactFace: "الوجه الملامس للسير الناقل",
+      selectContactFace: "اختر وجهًا…",
+      contactFaceHelp: "انقر على وجه القطعة في العارض أو اختره من القائمة.",
+      faceNumber: (number) => "الوجه " + number,
+      rotation: "الدوران على السير الناقل",
+      noGripper: "أنشئ قابضًا في إعداد القابض لعرضه هنا.",
+      graspTitle: "إمساك الروبوت",
+      graspFace: "وجه الإمساك",
+      tcpTitle: "TCP بالنسبة لإطار السير الناقل",
+      tcpValid: "تم حساب TCP",
+      tcpIncomplete: "إعداد غير مكتمل",
+      tcpError: "تعذّر حساب TCP",
+      reasons: {
+        graspFromBelow: "لا يمكن الوصول إلى وجه الإمساك إلا من أسفل السير الناقل",
+        beltTooNarrow: "القطعة لا تتسع في عرض السير الناقل",
+        missingPiece: "لم يتم اختيار قطعة", geometryChanged: "تغير الشكل الهندسي للقطعة", notCalculated: "لم يتم الحساب بعد",
+        missingContactFace: "وجه التلامس مع السير الناقل غير محدد",
+        missingGraspFace: "وجه الإمساك غير محدد",
+        geometryNotLoaded: "لم يتم تحميل الشكل الهندسي بعد",
+        unknownContactFace: "وجه التلامس لم يعد موجودًا",
+        invalidGraspOffsets: "إزاحات الإمساك غير صالحة",
+        invalidTransform: "لا يمكن حساب التحويل"
+      },
+      orientationConvention: "الاتجاه وفق اصطلاح الروبوت: ZYX، بالدرجات.",
+      frameLabel: "إطار السير",
+      tcpLabel: "TCP",
+      validation: {
+        contactFaceRequired: "اختر وجه القطعة الملامس للسير الناقل.",
+        invalidRotation: "الدوران على السير الناقل ليس رقمًا صالحًا.",
+        invalidPlacement: "الوضع على السير الناقل غير صالح.",
+        invalidGrasp: "يجب أن تكون إزاحات الإمساك والدوران أرقامًا صالحة."
+      }
+    },
     pieceDialog: {
+      notInLibrary: "هذه القطعة غير موجودة في مكتبة القطع.",
+      saveToLibrary: "احفظها في المكتبة بهذا الاسم",
+      nameInUse: (name) => "توجد بالفعل قطعة أخرى في المكتبة باسم «" + name + "». اختر اسمًا آخر.",
+      saveError: "تعذّر حفظ مكتبة القطع.",
+      editTitle: "تعديل القطعة", editSubtitle: "عدّل اسم القطعة.", saveChanges: "حفظ التغييرات",
       title: "قطعة جديدة",
       subtitle: "حدد شكلًا هندسيًا أو استورد نموذجًا ثلاثي الأبعاد.",
       library: "مكتبة القطع",
@@ -1212,6 +1650,8 @@ const translations = {
       }
     },
     pieces: {
+      duplicateSpacing: "المسافة بين النسخ",
+      edit: "تعديل",
       title: "إعداد القطع",
       new: "قطعة جديدة",
       duplicate: "تكرار",
@@ -1222,6 +1662,9 @@ const translations = {
     },
     separatorDialog: {
       title: "فاصل جديد",
+      editTitle: "تعديل الفاصل",
+      editSubtitle: "عدّل اسم الفاصل المحدد وأبعاده ولونه.",
+      saveChanges: "حفظ التغييرات",
       subtitle: "فاصل مستطيل بمرجع TCP ثابت عند TOP_CENTER.",
       close: "إغلاق",
       library: "مكتبة الفواصل",
@@ -1257,6 +1700,9 @@ const translations = {
       position: "موضع الفاصل"
     },
     layer: {
+      palletizingMode: "الرص", depalletizingMode: "فك الرص",
+      defineIds: "تحديد المعرفات", defineIdsTitle: "إعادة تحديد المعرفات", defineIdsWarning: "جميع القطع لديها معرف بالفعل. إذا تابعت، فسيتم حذف المعرفات الحالية وسيتعين عليك تحديدها مرة أخرى بالنقر على القطع واحدة تلو الأخرى.", defineIdsConfirm: "حذف وتحديد", defineIdsReverse: "عكس ترتيب المعرفات", defineGrasps: "تحديد الالتقاطات المتعددة", graspStartHint: "انقر على القطعة الدليلية للالتقاط · Esc للخروج", graspDraftHint: "انقر على القطع لإضافتها أو إزالتها · Enter للتأكيد · Esc للإلغاء", graspCount: (n) => "التقاط " + n + " قطع", graspAdjust: "ضبط TCP", graspConfirm: "تأكيد", graspDissolve: "إلغاء الالتقاط", graspNeedsGripper: "يجب تطبيق ماسك لتحديد الالتقاطات.", graspNeedsZone: "هذا الماسك المستورد ليس له منطقة إمساك. حددها في إعدادات الماسك.", graspMinPieces: "يحتاج الالتقاط إلى قطعتين على الأقل.", graspOtherGroup: "هذه القطعة تنتمي بالفعل إلى التقاط آخر.", graspReviewTitle: "التقاطات للمراجعة", graspReview: (id) => "التقاط " + id, graspIssues: { OUTSIDE_ZONE: (n) => n + ": خارج منطقة الإمساك", HEIGHT: (n) => n + ": وجه الالتقاط ليس على نفس الارتفاع", ORIENTATION: (n) => n + ": اتجاه مختلف عن القطعة الدليلية", SEPARATOR: (n) => n + ": لا يمكن تجميع الفواصل", NO_ZONE: () => "الماسك ليس له منطقة إمساك", NO_GRIPPER: () => "لا يوجد ماسك مطبق" }, defineIdsHint: (done, total) => "انقر على القطع بترتيب الوضع · " + done + "/" + total + " · Esc للإنهاء",
+      simulate: (name) => "محاكاة الطبقة " + name, simulationNeedsGripper: "يجب تطبيق قابض لمحاكاة الطبقة.", simulationHint: "جارٍ محاكاة الطبقة · اضغط Esc للخروج",
       title: "إعداد الطبقات",
       newEmpty: "طبقة فارغة جديدة",
       save: "حفظ الطبقة",
@@ -1285,6 +1731,7 @@ const translations = {
       robotTcp: "مرجع TCP للروبوت",
       contactFace: "وجه التلامس",
       orientation: "اتجاه المرجع",
+      advancedOptions: "خيارات متقدمة",
       faceOffsetX: "Face Offset X",
       faceOffsetY: "Face Offset Y",
       faceRotation: "Face Rotation",
@@ -1313,9 +1760,11 @@ const translations = {
     gripperOffsets: {
       generic: "إزاحات عامة", piece: (id) => "إزاحات القطعة ذات المعرف " + id,
       custom: "تستخدم هذه القطعة إزاحات مخصصة.", inherited: "ترث هذه القطعة الإزاحات العامة.",
-      approach: "إزاحة الاقتراب", retreat: "إزاحة الابتعاد", useGeneric: "استخدام الإزاحات العامة"
+      approach: "إزاحة الاقتراب", retreat: "إزاحة الابتعاد", useGeneric: "استخدام الإزاحات العامة",
+      simulateApproach: "محاكاة الاقتراب", simulateRetreat: "محاكاة الابتعاد", simulationNeedsGripper: "يجب تطبيق قابض لمحاكاة الحركة.", simulationHint: "المحاكاة قيد التشغيل · اضغط Esc للخروج"
     },
     palletizing: {
+      sendValues: "إرسال القيم",
       title: "إعداد الرص على المنصة",
       availableLayers: "الطبقات المتاحة",
       saveLayerFirst: "يجب حفظ طبقة أولًا.",
@@ -1345,6 +1794,7 @@ const translations = {
       pallet: "إعداد المنصة",
       pieces: "إعداد القطع",
       separators: "إعداد الفواصل",
+      conveyor: "إعداد السير الناقل",
       layers: "إعداد الطبقات",
       palletizing: "إعداد الرص على المنصة"
     }

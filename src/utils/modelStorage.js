@@ -98,3 +98,46 @@ export async function deleteImportedModel(modelId) {
 
   database.close();
 }
+
+// Tots els models desats (còpia de seguretat)
+export async function getAllImportedModels() {
+  const database = await openDatabase();
+
+  const records = await new Promise((resolve, reject) => {
+    const transaction = database.transaction(
+      MODEL_STORE,
+      "readonly"
+    );
+    const request = transaction
+      .objectStore(MODEL_STORE)
+      .getAll();
+
+    request.onsuccess = () => resolve(request.result ?? []);
+    request.onerror = () => reject(request.error);
+  });
+
+  database.close();
+  return records;
+}
+
+/*
+  Desa un model importat d'un fitxer amb el mateix id:
+  les peces, pinces i palets que el fan servir el
+  continuen trobant.
+*/
+export async function putImportedModelRecord(record) {
+  const database = await openDatabase();
+
+  await new Promise((resolve, reject) => {
+    const transaction = database.transaction(
+      MODEL_STORE,
+      "readwrite"
+    );
+    transaction.objectStore(MODEL_STORE).put(record);
+    transaction.oncomplete = resolve;
+    transaction.onerror = () => reject(transaction.error);
+    transaction.onabort = () => reject(transaction.error);
+  });
+
+  database.close();
+}

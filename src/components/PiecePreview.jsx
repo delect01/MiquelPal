@@ -15,7 +15,8 @@ import {
 import * as THREE from "three";
 import {
   getPieceLocalVertices
-} from "../utils/pieceGeometry";
+} from "../utils/pieceGeometry.js";
+import { registerCollisionGeometry } from "../utils/collisionGeometryStore.js";
 import {
   loadStoredModel
 } from "../utils/modelLoader.js";
@@ -88,7 +89,7 @@ function TrapezoidGeometry(props) {
   );
 }
 
-function StoredPreviewModel({
+export function StoredPreviewModel({
   modelId,
   bottomFace,
   onDimensions
@@ -118,10 +119,14 @@ function StoredPreviewModel({
           loadedObject
         );
 
-        onDimensions?.({
-          ...dimensions,
+        // El volum es comparteix per model, no va al formulari
+        registerCollisionGeometry(
+          modelId,
+          bottomFace,
           collisionGeometry
-        });
+        );
+
+        onDimensions?.(dimensions);
       })
       .catch((error) => {
         console.error(

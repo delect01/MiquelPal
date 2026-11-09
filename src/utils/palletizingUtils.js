@@ -1,10 +1,12 @@
 import * as THREE from "three";
+import { getPieceBoundingBox } from "./getPieceBoundingBox.js";
+import { arePiecesPreciselyColliding } from "./preciseCollision.js";
 import {
   getPieceLocalVertices
-} from "./pieceGeometry";
+} from "./pieceGeometry.js";
 import {
   palletEulerToThreeQuaternion
-} from "./pieceUtils";
+} from "./pieceUtils.js";
 
 function getPieceVerticalBounds(piece) {
   const quaternion =
@@ -111,6 +113,141 @@ export function getLayerVerticalBounds(
   };
 }
 
+/*
+  ASSENTAMENT DE LES CAPES
+
+  Cada capa baixa (sense deformar-se) des de sobre de
+  la pila fins que alguna peça toca les capes ja
+  col·locades o el palet. Així una capa no queda
+  flotant per culpa d'una peça alta (inclinada) de la
+  capa de sota.
+
+  - Es deixa una separació mínima perquè les peces no
+    es marquin com a col·lisió.
+  - Mai baixa per sota de la cara superior més baixa de
+    la capa anterior (no s'encaixa dins seu).
+  - El valor es calcula sempre: si una capa de sota
+    canvia, les de sobre s'hi tornen a assentar.
+*/
+export const LAYER_SETTLE_CLEARANCE_MM = 0.5;
+const MAX_SETTLE_STEP_MM = 5;
+const SETTLE_REFINE_ITERATIONS = 16;
+
+function getPieceZOffsetCopy(piece, offset) {
+  return { ...piece, z: (Number(piece.z) || 0) + offset };
+}
+
+// Capsa en Three.js (Y amunt = Z del palet) desplaçada verticalment
+function shiftBox(box, offset) {
+  return box.clone().translate(new THREE.Vector3(0, offset, 0));
+}
+
+function boxesOverlapInPlan(firstBox, secondBox) {
+  return (
+    firstBox.min.x < secondBox.max.x &&
+    firstBox.max.x > secondBox.min.x &&
+    firstBox.min.z < secondBox.max.z &&
+    firstBox.max.z > secondBox.min.z
+  );
+}
+
+/*
+  Desplaçament vertical més baix (entre minOffset i
+  startOffset) al qual la capa arriba baixant des de
+  startOffset sense tocar res. Per cada parella de
+  peces que coincideixen en planta: es baixa a passos
+  (més curts que la peça més prima, perquè no la
+  travessi) i, en trobar el contacte, s'afina.
+*/
+function getSettledOffset(layerPieces, placedPieces, startOffset, minOffset) {
+  if (placedPieces.length === 0) {
+    return minOffset;
+  }
+
+  if (startOffset <= minOffset) {
+    return startOffset;
+  }
+
+  const placedWithBoxes = placedPieces.map((piece) => ({
+    piece,
+    box: getPieceBoundingBox(piece)
+  }));
+
+  let settledOffset = minOffset;
+
+  layerPieces.forEach((piece) => {
+    const baseBox = getPieceBoundingBox(piece);
+    const pieceThickness = baseBox.max.y - baseBox.min.y;
+
+    placedWithBoxes.forEach(({ piece: placedPiece, box: placedBox }) => {
+      if (!boxesOverlapInPlan(baseBox, placedBox)) {
+        return;
+      }
+
+      // La peça de sota no arriba a la zona on pot baixar la de sobre
+      if (placedBox.max.y <= baseBox.min.y + settledOffset - LAYER_SETTLE_CLEARANCE_MM) {
+        return;
+      }
+
+      const collidesAt = (offset) => {
+        const testOffset = offset - LAYER_SETTLE_CLEARANCE_MM;
+        const shifted = shiftBox(baseBox, testOffset);
+
+        return (
+          shifted.min.y < placedBox.max.y &&
+          shifted.max.y > placedBox.min.y &&
+          arePiecesPreciselyColliding(
+            getPieceZOffsetCopy(piece, testOffset),
+            placedPiece
+          )
+        );
+      };
+
+      const thickness = Math.min(
+        pieceThickness,
+        placedBox.max.y - placedBox.min.y
+      );
+      const step = Math.max(
+        0.25,
+        Math.min(MAX_SETTLE_STEP_MM, thickness / 2)
+      );
+
+      let freeOffset = startOffset;
+
+      while (freeOffset > settledOffset) {
+        const nextOffset = Math.max(settledOffset, freeOffset - step);
+
+        if (collidesAt(nextOffset)) {
+          // Contacte entre nextOffset i freeOffset: s'afina
+          let low = nextOffset;
+          let high = freeOffset;
+
+          for (let iteration = 0; iteration < SETTLE_REFINE_ITERATIONS; iteration += 1) {
+            const middle = (low + high) / 2;
+
+            if (collidesAt(middle)) {
+              low = middle;
+            } else {
+              high = middle;
+            }
+          }
+
+          settledOffset = Math.max(settledOffset, high);
+          return;
+        }
+
+        freeOffset = nextOffset;
+      }
+    });
+  });
+
+  return settledOffset;
+}
+
+function getPieceTopZ(piece) {
+  return getPieceVerticalBounds(piece).maximumZ;
+}
+
 export function buildPalletizingLayers(
   sequence,
   savedLayers
@@ -134,7 +271,10 @@ export function buildPalletizingLayers(
     )
   );
 
-  let accumulatedHeight = 0;
+  // Peces ja col·locades (amb la seva Z final) i capa anterior
+  const placedPieces = [];
+  let stackTopZ = 0;
+  let previousLayerPieces = null;
 
   return safeSequence.flatMap(
     (
@@ -155,19 +295,37 @@ export function buildPalletizingLayers(
           sourceLayer
         );
 
-      const verticalOffset =
-        accumulatedHeight -
-        bounds.minimumZ;
-
-      const layerNumber =
-        sequenceIndex + 1;
-
       const sourcePieces =
         Array.isArray(
           sourceLayer.pieces
         )
           ? sourceLayer.pieces
           : [];
+
+      // Sobre de tota la pila, amb la separació (sempre lliure): punt de partida
+      const startOffset =
+        stackTopZ -
+        bounds.minimumZ +
+        (placedPieces.length > 0 ? LAYER_SETTLE_CLEARANCE_MM : 0);
+
+      // Límits: el palet i la cara superior més baixa de la capa anterior
+      const lowestPreviousTopZ = previousLayerPieces?.length
+        ? Math.min(...previousLayerPieces.map(getPieceTopZ))
+        : 0;
+      const minOffset =
+        Math.max(0, lowestPreviousTopZ) - bounds.minimumZ;
+
+      const verticalOffset = getSettledOffset(
+        sourcePieces,
+        placedPieces,
+        startOffset,
+        minOffset
+      );
+
+      const baseZ = bounds.minimumZ + verticalOffset;
+
+      const layerNumber =
+        sequenceIndex + 1;
 
       const layerInstance = {
         instanceId:
@@ -181,14 +339,13 @@ export function buildPalletizingLayers(
 
         layerNumber,
 
-        baseZ:
-          accumulatedHeight,
+        baseZ,
 
         height:
           bounds.height,
 
         topZ:
-          accumulatedHeight +
+          baseZ +
           bounds.height,
 
         pieces:
@@ -218,8 +375,9 @@ export function buildPalletizingLayers(
           )
       };
 
-      accumulatedHeight +=
-        bounds.height;
+      placedPieces.push(...layerInstance.pieces);
+      previousLayerPieces = layerInstance.pieces;
+      stackTopZ = Math.max(stackTopZ, layerInstance.topZ);
 
       return [layerInstance];
     }

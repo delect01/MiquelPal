@@ -5,6 +5,7 @@ import {
 import {
   loadStoredModel
 } from "../utils/modelLoader.js";
+import { registerCollisionGeometry } from "../utils/collisionGeometryStore.js";
 
 const DIMMED_OPACITY = 0.24;
 
@@ -38,15 +39,23 @@ function saveOriginalMaterialState(material) {
   return originalState;
 }
 
+/*
+  Mateixos colors i comportament que les peces creades
+  (DraggablePiece): vermell seleccionada, blau xoc,
+  groc fora del palet i sense ombra quan s'atenua.
+*/
 function applyVisualState(
   object,
   visualState,
-  dimmed
+  dimmed,
+  pieceColor
 ) {
   object.traverse((child) => {
     if (!child.isMesh) {
       return;
     }
+
+    child.castShadow = !dimmed;
 
     const materials =
       Array.isArray(child.material)
@@ -64,15 +73,19 @@ function applyVisualState(
         );
 
       if (visualState === "selected") {
-        material.color?.set("#ff0000");
+        material.color?.set("red");
       } else if (
         visualState === "colliding"
       ) {
-        material.color?.set("#1565ff");
+        material.color?.set("blue");
       } else if (
         visualState === "outside"
       ) {
-        material.color?.set("#ffd000");
+        material.color?.set("yellow");
+      } else if (
+        material.userData.usesPieceColor
+      ) {
+        material.color?.set(pieceColor);
       } else {
         material.color?.setHex(
           originalState.color
@@ -108,7 +121,8 @@ export default function ImportedPieceModel({
   modelId,
   bottomFace = "NEGATIVE_Y",
   visualState = "normal",
-  dimmed = false
+  dimmed = false,
+  color = "orange"
 }) {
   const [object, setObject] =
     useState(null);
@@ -126,6 +140,13 @@ export default function ImportedPieceModel({
         if (!active) {
           return;
         }
+
+        // Aprofita la càrrega per compartir el volum de col·lisió
+        registerCollisionGeometry(
+          modelId,
+          bottomFace,
+          result.collisionGeometry
+        );
 
         setObject(result.object);
       })
@@ -152,12 +173,14 @@ export default function ImportedPieceModel({
     applyVisualState(
       object,
       visualState,
-      dimmed
+      dimmed,
+      color
     );
   }, [
     object,
     visualState,
-    dimmed
+    dimmed,
+    color
   ]);
 
   if (!object) {

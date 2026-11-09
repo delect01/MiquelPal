@@ -1,8 +1,10 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import { Canvas } from "@react-three/fiber";
 import { Bounds, Center, Edges, OrbitControls } from "@react-three/drei";
 import * as THREE from "three";
 import ImportedGripperModel from "./ImportedGripperModel.jsx";
+import GripZonePlane from "./GripZonePlane.jsx";
+import { getGripperActiveZone } from "../utils/graspGeometry.js";
 
 function ArrowSet({ position, quaternion, length }) {
   const arrows = useMemo(() => [
@@ -40,6 +42,8 @@ function BoxGripper({ gripper }) {
         <meshStandardMaterial color={gripper.color || "#64748b"} transparent opacity={0.42} roughness={0.55} />
         <Edges threshold={15} color="#334155" />
       </mesh>
+      {/* Zona d'agafada: la cara inferior de la capsa */}
+      <GripZonePlane zone={{ centerX: 0, centerY: 0, sizeX, sizeY }} />
       <ArrowSet
         position={new THREE.Vector3(offsetX, offsetY, 0.5)}
         quaternion={tcpQuaternion}
@@ -64,6 +68,8 @@ function ImportedTcpScene({ gripper, selectingTcp, onTcpSelected, onDimensions }
     Number(gripper.tcpQuaternion?.z) || 0,
     Number(gripper.tcpQuaternion?.w) || 1
   ).normalize();
+  // Zona d'agafada (en els eixos del TCP)
+  const zone = getGripperActiveZone(gripper);
   const arrowLength = Math.max(Math.min(Number(gripper.sizeX) || 100, Number(gripper.sizeY) || 100, Number(gripper.sizeZ) || 100) * 0.45, 50);
 
   function chooseTcp(event) {
@@ -110,6 +116,14 @@ function ImportedTcpScene({ gripper, selectingTcp, onTcpSelected, onDimensions }
         />
       </group>
       <ArrowSet position={tcpPosition} quaternion={tcpQuaternion} length={arrowLength} />
+      {zone && (
+        <group
+          position={[tcpPosition.x, tcpPosition.y, tcpPosition.z]}
+          quaternion={[tcpQuaternion.x, tcpQuaternion.y, tcpQuaternion.z, tcpQuaternion.w]}
+        >
+          <GripZonePlane zone={zone} />
+        </group>
+      )}
     </group>
   );
 }

@@ -1,5 +1,5 @@
 import * as THREE from "three";
-import { getPieceCenter } from "./pieceUtils";
+import { getPieceCenter } from "./pieceUtils.js";
 
 export function normalizeScreenRectangle(rectangle) {
   return {

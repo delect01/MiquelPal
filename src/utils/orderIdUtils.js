@@ -1,3 +1,8 @@
+import {
+  getOperationKey,
+  getOperations
+} from "./graspGroups.js";
+
 export function getNextOrderId(pieces) {
   const validIds = pieces
     .map((piece) => Number(piece.orderId))
@@ -12,83 +17,104 @@ export function getNextOrderId(pieces) {
     : Math.max(...validIds) + 1;
 }
 
+/*
+  Renumera les operacions de l'1 a N mantenint l'ordre
+  actual. Les peces d'una agafada múltiple són una sola
+  operació i reben totes el mateix número.
+*/
 export function normalizeOrderIdsAfterDeletion(
   pieces
 ) {
-  const sortedPieces = [
-    ...pieces
-  ].sort(
-    (
-      firstPiece,
-      secondPiece
-    ) => {
-      const firstOrderId =
-        Number(
-          firstPiece.orderId
-        );
-
-      const secondOrderId =
-        Number(
-          secondPiece.orderId
-        );
-
-      const firstIsValid =
-        Number.isInteger(
-          firstOrderId
-        ) &&
-        firstOrderId > 0;
-
-      const secondIsValid =
-        Number.isInteger(
-          secondOrderId
-        ) &&
-        secondOrderId > 0;
-
-      if (
-        firstIsValid &&
-        secondIsValid
-      ) {
-        return (
-          firstOrderId -
-          secondOrderId
-        );
-      }
-
-      if (firstIsValid) {
-        return -1;
-      }
-
-      if (secondIsValid) {
-        return 1;
-      }
-
-      return (
-        Number(firstPiece.id) -
-        Number(secondPiece.id)
-      );
-    }
+  const operations = getOperations(pieces).map(
+    (operation, index) => ({
+      ...operation,
+      orderId: getOperationOrderId(operation),
+      index
+    })
   );
 
-  const orderIdByPieceId =
-    new Map(
-      sortedPieces.map(
-        (piece, index) => [
-          piece.id,
-          index + 1
-        ]
-      )
+  operations.sort((first, second) => {
+    const firstIsValid = first.orderId !== null;
+    const secondIsValid = second.orderId !== null;
+
+    if (firstIsValid && secondIsValid) {
+      return first.orderId - second.orderId;
+    }
+
+    if (firstIsValid) {
+      return -1;
+    }
+
+    if (secondIsValid) {
+      return 1;
+    }
+
+    return (
+      Number(first.lead.id) - Number(second.lead.id) ||
+      first.index - second.index
     );
+  });
+
+  const orderIdByKey = new Map(
+    operations.map((operation, index) => [
+      operation.key,
+      index + 1
+    ])
+  );
 
   return pieces.map(
     (piece) => ({
       ...piece,
 
       orderId:
-        orderIdByPieceId.get(
-          piece.id
+        orderIdByKey.get(
+          getOperationKey(piece)
         )
     })
   );
+}
+
+/*
+  Número d'una operació: el de la peça guia o, si no en
+  té, el primer vàlid del grup. null si no en té cap.
+*/
+export function getOperationOrderId(operation) {
+  const source = [operation.lead, ...operation.pieces].find(
+    hasValidOrderId
+  );
+
+  return source ? Number(source.orderId) : null;
+}
+
+/*
+  Inverteix l'ordre de les operacions (útil per
+  despaletitzar): la primera passa a ser l'última i a
+  l'inrevés, amb els mateixos números. Una agafada
+  múltiple es mou sencera.
+*/
+export function reverseOperationOrderIds(pieces) {
+  const ordered = getOperations(pieces)
+    .map((operation) => ({
+      key: operation.key,
+      orderId: getOperationOrderId(operation)
+    }))
+    .filter((operation) => operation.orderId !== null)
+    .sort((first, second) => first.orderId - second.orderId);
+
+  const reversedByKey = new Map(
+    ordered.map((operation, index) => [
+      operation.key,
+      ordered[ordered.length - 1 - index].orderId
+    ])
+  );
+
+  return pieces.map((piece) => {
+    const key = getOperationKey(piece);
+
+    return reversedByKey.has(key) && hasValidOrderId(piece)
+      ? { ...piece, orderId: reversedByKey.get(key) }
+      : piece;
+  });
 }
 
 export function getOrderIdValidation(pieces) {
@@ -128,7 +154,7 @@ export function getOrderIdValidation(pieces) {
         numericValue
       ) ?? [];
 
-    currentList.push(piece.id);
+    currentList.push(piece);
 
     piecesByOrderId.set(
       numericValue,
@@ -136,20 +162,53 @@ export function getOrderIdValidation(pieces) {
     );
   });
 
+  /*
+    Un ID repetit només és correcte dins d'una mateixa
+    agafada múltiple (una sola operació del robot).
+  */
   piecesByOrderId.forEach(
-    (pieceIds) => {
-      if (pieceIds.length <= 1) {
+    (piecesWithId) => {
+      const operationKeys = new Set(
+        piecesWithId.map(getOperationKey)
+      );
+
+      if (operationKeys.size <= 1) {
         return;
       }
 
-      pieceIds.forEach((pieceId) => {
+      piecesWithId.forEach((piece) => {
         issuesByPieceId.set(
-          pieceId,
+          piece.id,
           "DUPLICATE"
         );
       });
     }
   );
+
+  // Totes les peces d'una agafada han de tenir el mateix ID
+  const operations = getOperations(pieces);
+
+  operations.forEach((operation) => {
+    if (operation.groupId === null) {
+      return;
+    }
+
+    const groupOrderIds = new Set(
+      operation.pieces
+        .filter(hasValidOrderId)
+        .map((piece) => Number(piece.orderId))
+    );
+
+    if (groupOrderIds.size <= 1) {
+      return;
+    }
+
+    operation.pieces.forEach((piece) => {
+      if (!issuesByPieceId.has(piece.id)) {
+        issuesByPieceId.set(piece.id, "GROUP_MISMATCH");
+      }
+    });
+  });
 
   const validOrderIds = pieces
     .map((piece) => Number(piece.orderId))
@@ -165,7 +224,7 @@ export function getOrderIdValidation(pieces) {
 
   const expectedIds = Array.from(
     {
-      length: pieces.length
+      length: operations.length
     },
     (_, index) => index + 1
   );
@@ -194,6 +253,7 @@ export function getOrderIdValidation(pieces) {
     empty: 0,
     invalid: 0,
     duplicate: 0,
+    groupMismatch: 0,
     nonConsecutive:
       issuesByPieceId.size > 0 &&
       Array.from(
@@ -215,6 +275,10 @@ export function getOrderIdValidation(pieces) {
     if (issue === "DUPLICATE") {
       counts.duplicate += 1;
     }
+
+    if (issue === "GROUP_MISMATCH") {
+      counts.groupMismatch += 1;
+    }
   });
 
   return {
@@ -223,7 +287,7 @@ export function getOrderIdValidation(pieces) {
     issuesByPieceId,
     counts,
     expectedMaximum:
-      pieces.length
+      operations.length
   };
 }
 
@@ -250,6 +314,12 @@ export function createOrderIdErrorMessage(
     );
   }
 
+  if (validation.counts.groupMismatch > 0) {
+    messages.push(
+      `${validation.counts.groupMismatch} element(s) d'una agafada múltiple amb ID diferents.`
+    );
+  }
+
   if (validation.counts.nonConsecutive) {
     messages.push(
       `Els ID han de ser consecutius de l'1 al ${validation.expectedMaximum}.`
@@ -263,4 +333,34 @@ export function createOrderIdErrorMessage(
     "",
     "Corregeix els ID i torna-ho a provar."
   ].join("\n");
+}
+
+/*
+  Peces en ordre de col·locació (orderId de menor a
+  major). Els orderId no vàlids (buits o a mig
+  escriure) van al final, en el seu ordre actual.
+*/
+export function sortPiecesByOrderId(pieces) {
+  function getSortKey(piece) {
+    return hasValidOrderId(piece)
+      ? Number(piece.orderId)
+      : Infinity;
+  }
+
+  return [...pieces].sort(
+    (firstPiece, secondPiece) =>
+      getSortKey(firstPiece) - getSortKey(secondPiece) || 0
+  );
+}
+
+// orderId enter i positiu (un camp buit no compta)
+export function hasValidOrderId(piece) {
+  const orderId = Number(piece.orderId);
+
+  return (
+    piece.orderId !== null &&
+    piece.orderId !== "" &&
+    Number.isInteger(orderId) &&
+    orderId > 0
+  );
 }

@@ -2,7 +2,44 @@ import * as THREE from "three";
 
 import {
   palletToThree
-} from "./pieceUtils";
+} from "./pieceUtils.js";
+
+import { PALLET_CONFIG } from "../Config/geometryConfig";
+
+const PALLET_LIBRARY_STORAGE_KEY =
+  "pallet-simulator-pallet-library";
+
+/*
+  Palet amb què comença l'aplicació (i cada projecte
+  nou): la plantilla de la biblioteca de palets que es
+  diu com el palet predeterminat ("Palet predeterminat").
+  Si no n'hi ha cap, el palet predeterminat del codi.
+*/
+export function getDefaultPallet() {
+  try {
+    const savedValue = window.localStorage.getItem(
+      PALLET_LIBRARY_STORAGE_KEY
+    );
+    const savedPallets = savedValue ? JSON.parse(savedValue) : [];
+    const defaultName = PALLET_CONFIG.name.trim().toLowerCase();
+
+    const savedDefault = Array.isArray(savedPallets)
+      ? savedPallets.find(
+          (pallet) =>
+            String(pallet?.name ?? "").trim().toLowerCase() ===
+            defaultName
+        )
+      : null;
+
+    if (savedDefault) {
+      return { ...savedDefault };
+    }
+  } catch (error) {
+    console.error("No s'ha pogut llegir la biblioteca de palets:", error);
+  }
+
+  return { ...PALLET_CONFIG };
+}
 
 export function getPalletCenterPallet(
   pallet

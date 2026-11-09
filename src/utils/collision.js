@@ -4,7 +4,7 @@ import {
 
 import {
   getPieceBoundingBox
-} from "./getPieceBoundingBox";
+} from "./getPieceBoundingBox.js";
 
 import {
   getPalletBoundingBox
@@ -12,7 +12,7 @@ import {
 
 import {
   arePiecesPreciselyColliding
-} from "./preciseCollision";
+} from "./preciseCollision.js";
 
 function getAxisOverlap(
   minimumA,

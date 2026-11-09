@@ -8,14 +8,6 @@ const PLANE_NORMAL_EPSILON = 1e-5;
 const PLANE_DISTANCE_EPSILON = 1e-3;
 const EDGE_DIRECTION_EPSILON = 1e-6;
 
-function serializeVector(vector) {
-  return {
-    x: vector.x,
-    y: vector.y,
-    z: vector.z
-  };
-}
-
 function vertexKey(vector) {
   return [
     vector.x,
@@ -29,6 +21,15 @@ function vertexKey(vector) {
     )
     .join(":");
 }
+
+function serializeVector(vector) {
+  return {
+    x: vector.x,
+    y: vector.y,
+    z: vector.z
+  };
+}
+
 
 function edgeKey(indexA, indexB) {
   return indexA < indexB
@@ -420,58 +421,9 @@ function serializeFaces(
 }
 
 
-function collectExactWorldMesh(object) {
-  const vertices = [];
-  const triangles = [];
-  const vertexMap = new Map();
-  object.updateMatrixWorld(true);
-
-  const addVertex = (vector) => {
-    const key = vertexKey(vector);
-    if (!vertexMap.has(key)) {
-      vertexMap.set(key, vertices.length);
-      vertices.push(vector.clone());
-    }
-    return vertexMap.get(key);
-  };
-
-  object.traverse((child) => {
-    if (
-      !child.isMesh ||
-      !isEffectivelyVisible(child) ||
-      !meshHasVisibleMaterial(child) ||
-      isAuxiliaryMesh(child)
-    ) return;
-
-    const geometry = child.geometry;
-    const position = geometry?.attributes?.position;
-    if (!position) return;
-    const index = geometry.index;
-    const count = index ? index.count : position.count;
-
-    for (let offset = 0; offset + 2 < count; offset += 3) {
-      const triangle = [];
-      for (let corner = 0; corner < 3; corner += 1) {
-        const vertexIndex = index ? index.getX(offset + corner) : offset + corner;
-        const vector = new THREE.Vector3()
-          .fromBufferAttribute(position, vertexIndex)
-          .applyMatrix4(child.matrixWorld);
-        triangle.push(addVertex(vector));
-      }
-      if (new Set(triangle).size === 3) triangles.push(triangle);
-    }
-  });
-
-  return {
-    vertices: vertices.map(serializeVector),
-    triangles
-  };
-}
-
 export function buildImportedCollisionGeometry(
   object
 ) {
-  const exact = collectExactWorldMesh(object);
   const points =
     collectWorldPoints(object);
 
@@ -572,7 +524,6 @@ export function buildImportedCollisionGeometry(
 
   return {
     version: 2,
-    exact,
     vertices:
       vertices.map(
         serializeVector

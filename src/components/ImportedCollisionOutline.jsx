@@ -44,7 +44,7 @@ export default function ImportedCollisionOutline({
       />
 
       <Edges
-        threshold={10}
+        threshold={15}
         color={color}
       />
     </mesh>

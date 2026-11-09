@@ -5,7 +5,7 @@ import * as THREE from "three";
 import {
   getPieceCenter,
   palletEulerToThreeQuaternion
-} from "./pieceUtils";
+} from "./pieceUtils.js";
 
 /*
   Retorna els 8 vèrtexs locals de la peça.

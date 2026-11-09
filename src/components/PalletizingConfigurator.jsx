@@ -8,6 +8,7 @@ export default function PalletizingConfigurator({
   selectedInstanceId,
   onAddLayer,
   onSelectInstance,
+  onSendValues,
   t
 }) {
   const layerById = new Map(
@@ -255,6 +256,29 @@ export default function PalletizingConfigurator({
       >
         {t.palletizing.deleteHelp}
       </div>
+
+      {/*
+        Encara no fa res: en el futur enviarà tota la
+        informació del paletitzat en un document.
+      */}
+      <button
+        type="button"
+        onClick={() => onSendValues?.()}
+        style={{
+          width: "100%",
+          height: "38px",
+          marginTop: "12px",
+          border: "none",
+          borderRadius: "6px",
+          background: "#168447",
+          color: "#ffffff",
+          fontSize: "13px",
+          fontWeight: 700,
+          cursor: "pointer"
+        }}
+      >
+        {t.palletizing.sendValues}
+      </button>
     </section>
   );
 }

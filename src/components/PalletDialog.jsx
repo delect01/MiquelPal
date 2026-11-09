@@ -8,9 +8,25 @@ import {
 import PalletPreview from "./PalletPreview";
 import Import3DButton from "./Import3DButton.jsx";
 import { loadTransformedStoredModel } from "../utils/modelLoader.js";
+import NumericInput from "./NumericInput.jsx";
+import { preserveUnreadableStorageList } from "../utils/projectStorage.js";
 
 const STORAGE_KEY =
   "pallet-simulator-pallet-library";
+
+// Les mides es mostren i es desen amb 3 decimals com a màxim
+function roundTo3(value) {
+  return Math.round(Number(value) * 1000) / 1000;
+}
+
+// Mides calculades d'un model importat, arrodonides
+function getRoundedPalletDimensions(loaded) {
+  return {
+    sizeX: roundTo3(loaded.palletDimensions.sizeX),
+    sizeY: roundTo3(loaded.palletDimensions.sizeY),
+    sizeZ: roundTo3(loaded.palletDimensions.sizeZ)
+  };
+}
 
 function createFormFromPallet(
   pallet
@@ -21,13 +37,13 @@ function createFormFromPallet(
       "",
 
     sizeX:
-      Number(pallet.sizeX),
+      roundTo3(pallet.sizeX),
 
     sizeY:
-      Number(pallet.sizeY),
+      roundTo3(pallet.sizeY),
 
     sizeZ:
-      Number(pallet.sizeZ),
+      roundTo3(pallet.sizeZ),
 
     color:
       pallet.color ??
@@ -73,6 +89,11 @@ function loadSavedPallets() {
 function savePalletLibrary(
   pallets
 ) {
+  // Una biblioteca illegible es conserva abans de sobreescriure-la
+  if (!preserveUnreadableStorageList(STORAGE_KEY)) {
+    return false;
+  }
+
   try {
     window.localStorage.setItem(
       STORAGE_KEY,
@@ -109,16 +130,9 @@ function NumericField({
     >
       {label}
 
-      <input
-        type="number"
-        min="1"
-        step="1"
+      <NumericInput
         value={value}
-        onChange={(event) => {
-          onChange(
-            event.target.value
-          );
-        }}
+        onChange={onChange}
         style={{
           width: "100%",
           minWidth: 0,
@@ -723,7 +737,7 @@ useEffect(() => {
                 <Import3DButton t={t} onImported={async (importedModel) => {
                   const modelData = { modelId: importedModel.modelId, modelName: importedModel.modelName, modelFormat: importedModel.modelFormat, modelUnit: importedModel.modelUnit, modelBottomFace: importedModel.modelBottomFace ?? "NEGATIVE_Y", rotationX: 0, rotationY: 0, rotationZ: 0 };
                   const loaded = await loadTransformedStoredModel(modelData.modelId, modelData);
-                  setForm((current) => ({ ...current, name: current.name || importedModel.name || "", sizeX: loaded.palletDimensions.sizeX, sizeY: loaded.palletDimensions.sizeY, sizeZ: loaded.palletDimensions.sizeZ, modelType: "IMPORTED_3D", modelData }));
+                  setForm((current) => ({ ...current, name: current.name || importedModel.name || "", ...getRoundedPalletDimensions(loaded), modelType: "IMPORTED_3D", modelData }));
                 }} />
               </div>
             </section>
@@ -827,7 +841,7 @@ useEffect(() => {
                   return <NumericField key={key} label={`R${axis}`} value={form.modelData[key] ?? 0} onChange={async (value) => {
                     const next = { ...form.modelData, [key]: Number(value) || 0 };
                     const loaded = await loadTransformedStoredModel(next.modelId, next);
-                    setForm((current) => ({ ...current, sizeX: loaded.palletDimensions.sizeX, sizeY: loaded.palletDimensions.sizeY, sizeZ: loaded.palletDimensions.sizeZ, modelData: next }));
+                    setForm((current) => ({ ...current, ...getRoundedPalletDimensions(loaded), modelData: next }));
                   }} />;
                 })}
               </div>
@@ -926,16 +940,6 @@ useEffect(() => {
               modelType={form.modelType}
               modelData={form.modelData}
             />
-
-            <div
-              style={{
-                marginTop: "8px",
-                color: "#59636e",
-                fontSize: "13px"
-              }}
-            >
-              {t.palletDialog.surfaceHelp}
-            </div>
           </div>
         </div>
 

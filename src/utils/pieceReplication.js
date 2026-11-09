@@ -1,10 +1,59 @@
-import * as THREE from "three";
-import { getPieceLocalVertices } from "./pieceGeometry";
-import { palletEulerToThreeQuaternion, threeToPallet } from "./pieceUtils";
+import { getPieceLocalVertices } from "./pieceGeometry.js";
+import { palletEulerToThreeQuaternion, threeToPallet } from "./pieceUtils.js";
+import { withoutGraspGroup } from "./graspGroups.js";
 
 const REPLICATION_CLEARANCE = 0.5;
 
-function getProjectedStep(piece) {
+/*
+  DISTÀNCIA DE DUPLICACIÓ
+
+  Separació (mm) entre una peça i les seves còpies, en
+  X i en Y del palet: 0 = enganxades. La fan servir el
+  botó Duplicar i la rèplica amb Ctrl + arrossegar. Es
+  desa al navegador.
+*/
+const SPACING_STORAGE_KEY = "pallet-simulator-duplicate-spacing";
+
+function toSpacingValue(value) {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) && numericValue > 0 ? numericValue : 0;
+}
+
+export function normalizeDuplicateSpacing(spacing) {
+  return {
+    x: toSpacingValue(spacing?.x),
+    y: toSpacingValue(spacing?.y)
+  };
+}
+
+export function loadDuplicateSpacing() {
+  try {
+    const savedValue = window.localStorage.getItem(SPACING_STORAGE_KEY);
+    return normalizeDuplicateSpacing(savedValue ? JSON.parse(savedValue) : null);
+  } catch {
+    return normalizeDuplicateSpacing(null);
+  }
+}
+
+export function saveDuplicateSpacing(spacing) {
+  try {
+    window.localStorage.setItem(
+      SPACING_STORAGE_KEY,
+      JSON.stringify(normalizeDuplicateSpacing(spacing))
+    );
+  } catch (error) {
+    console.error("No s'ha pogut desar la distància de duplicació:", error);
+  }
+}
+
+/*
+  Pas entre còpies en l'espai de Three.js: la mida de la
+  peça (girada) més el marge i la separació. En Three.js
+  X = -Y del palet i Z = -X del palet.
+*/
+function getProjectedStep(piece, spacing = null) {
+  const { x: spacingX, y: spacingY } = normalizeDuplicateSpacing(spacing);
+
   const quaternion =
     palletEulerToThreeQuaternion(
       Number(piece.rxDeg) || 0,
@@ -61,14 +110,27 @@ function getProjectedStep(piece) {
     );
 
   return {
+    // X de Three.js = Y del palet
     stepX:
       projectedSizeX +
-      REPLICATION_CLEARANCE,
+      REPLICATION_CLEARANCE +
+      spacingY,
 
+    // Z de Three.js = X del palet
     stepZ:
       projectedSizeZ +
-      REPLICATION_CLEARANCE
+      REPLICATION_CLEARANCE +
+      spacingX
   };
+}
+
+/*
+  Desplaçament en X del palet de la còpia que fa el botó
+  Duplicar: just al costat de la peça (+X), separada per
+  la distància de duplicació en X.
+*/
+export function getDuplicateOffsetX(piece, spacing) {
+  return getProjectedStep(piece, spacing).stepZ;
 }
 
 export function buildReplicationCandidates({
@@ -76,14 +138,15 @@ export function buildReplicationCandidates({
   startThreeX,
   startThreeZ,
   currentThreeX,
-  currentThreeZ
+  currentThreeZ,
+  spacing = null
 }) {
   if (!sourcePiece) {
     return [];
   }
 
   const { stepX, stepZ } =
-    getProjectedStep(sourcePiece);
+    getProjectedStep(sourcePiece, spacing);
 
   const deltaX = currentThreeX - startThreeX;
   const deltaZ = currentThreeZ - startThreeZ;
@@ -136,8 +199,9 @@ export function buildReplicationCandidates({
           `${columnIndex}-${rowIndex}`,
         columnIndex,
         rowIndex,
+        // Les còpies són agafades individuals
         piece: {
-          ...sourcePiece,
+          ...withoutGraspGroup(sourcePiece),
           x: palletPosition.x,
           y: palletPosition.y
         }

@@ -47,9 +47,77 @@ export function loadProjectLibrary() {
   }
 }
 
+/*
+  Protecció de les llistes desades (projectes i
+  biblioteques).
+
+  Si el valor d'una clau existeix però no és una llista
+  llegible (JSON corrupte o un altre tipus), en llegir-lo
+  l'aplicació veu una llista buida. Abans que el primer
+  guardat el sobreescrigui, se'n fa una còpia a
+  "<clau>-backup-<data>" perquè les dades antigues no es
+  perdin.
+
+  Retorna false si el valor és illegible i no s'ha pogut
+  fer la còpia: en aquest cas no s'ha de sobreescriure.
+*/
+export function preserveUnreadableStorageList(storageKey) {
+  let savedValue;
+
+  try {
+    savedValue = window.localStorage.getItem(storageKey);
+  } catch (error) {
+    console.error("No s'ha pogut llegir:", storageKey, error);
+    return false;
+  }
+
+  if (!savedValue) {
+    return true;
+  }
+
+  try {
+    if (Array.isArray(JSON.parse(savedValue))) {
+      return true;
+    }
+  } catch {
+    // Illegible: es fa la còpia de seguretat
+  }
+
+  const backupKey = `${storageKey}-backup-${new Date()
+    .toISOString()
+    .replace(/[:.]/g, "-")}`;
+
+  try {
+    window.localStorage.setItem(backupKey, savedValue);
+    console.warn(
+      "Dades illegibles conservades a",
+      backupKey,
+      "abans de sobreescriure",
+      storageKey
+    );
+    return true;
+  } catch (error) {
+    console.error(
+      "No s'ha pogut conservar una còpia de les dades illegibles de",
+      storageKey,
+      error
+    );
+    return false;
+  }
+}
+
 export function saveProjectLibrary(
   projects
 ) {
+  // Mai sobreescriure una biblioteca illegible sense còpia
+  if (
+    !preserveUnreadableStorageList(
+      PROJECT_LIBRARY_STORAGE_KEY
+    )
+  ) {
+    return false;
+  }
+
   try {
     window.localStorage.setItem(
       PROJECT_LIBRARY_STORAGE_KEY,

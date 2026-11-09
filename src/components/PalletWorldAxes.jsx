@@ -6,7 +6,7 @@ import * as THREE from "three";
 
 import {
   palletToThree
-} from "../utils/pieceUtils";
+} from "../utils/pieceUtils.js";
 
 export default function PalletWorldAxes({
   length = 250

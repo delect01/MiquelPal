@@ -69,6 +69,28 @@ export function palletEulerToThreeQuaternion(
         )
       );
 
+  return palletQuaternionToThree(
+    palletQuaternion
+  );
+}
+
+/*
+  Converteix una orientació expressada en un frame
+  de robot (X endavant, Y esquerra, Z amunt: palet o
+  cinta) al sistema de Three.js.
+
+  És la mateixa conjugació per la matriu base que
+  utilitza palletEulerToThreeQuaternion.
+*/
+/*
+  Rotació que porta els eixos d'un frame de robot
+  (X endavant, Y esquerra, Z amunt) als de Three.js:
+  és la mateixa base que palletVectorToThree.
+
+  Un grup de Three.js amb aquesta rotació permet
+  dibuixar a dins directament en coordenades de robot.
+*/
+export function getPalletToThreeBasisQuaternion() {
   const basisMatrix =
     new THREE.Matrix4()
       .makeBasis(
@@ -96,6 +118,15 @@ export function palletEulerToThreeQuaternion(
       )
       .normalize();
 
+  return basisQuaternion;
+}
+
+export function palletQuaternionToThree(
+  palletQuaternion
+) {
+  const basisQuaternion =
+    getPalletToThreeBasisQuaternion();
+
   return basisQuaternion
     .clone()
     .multiply(
@@ -107,7 +138,41 @@ export function palletEulerToThreeQuaternion(
         .invert()
     )
     .normalize();
+}
 
+/*
+  Angles del robot a partir d'un quaternion expressat
+  en un frame de robot: convenció ZYX, en graus,
+  normalitzats a [0, 360).
+
+  És la mateixa descomposició que getReferenceWorldEuler.
+*/
+export function quaternionToRobotEuler(quaternion) {
+  const euler = new THREE.Euler(0, 0, 0, "ZYX");
+
+  euler.setFromQuaternion(quaternion, "ZYX");
+
+  const normalizeDegrees = (radians) => {
+    let normalized = THREE.MathUtils.euclideanModulo(
+      THREE.MathUtils.radToDeg(radians),
+      360
+    );
+
+    if (
+      Math.abs(normalized) < 1e-8 ||
+      Math.abs(normalized - 360) < 1e-8
+    ) {
+      normalized = 0;
+    }
+
+    return normalized;
+  };
+
+  return {
+    rx: normalizeDegrees(euler.x),
+    ry: normalizeDegrees(euler.y),
+    rz: normalizeDegrees(euler.z)
+  };
 }
 
 
@@ -120,7 +185,7 @@ export function palletEulerToThreeQuaternion(
 
 
 
-//import { getReferenceOffset } from "./pieceUtils";
+//import { getReferenceOffset } from "./pieceUtils.js";
 export function getPieceSize(piece) {
   return {
     width: piece.width,
@@ -706,92 +771,17 @@ export function getReferenceQuaternionFromAxes(
 export function getReferenceWorldEuler(
   piece
 ) {
-
   /*
     El quaternion representa el frame final
-    expressat en WORLD pallet.
+    expressat en WORLD pallet. El robot el descompon
+    en ZYX (vegeu quaternionToRobotEuler).
   */
-  const quaternion =
+  return quaternionToRobotEuler(
     getReferenceQuaternion(
       piece
-    );
-
-  /*
-    El robot descompon l'orientació
-    segons la convenció ZYX.
-
-    Els valors resultants continuen sent:
-    rx = rotació X
-    ry = rotació Y
-    rz = rotació Z
-  */
-  const euler =
-    new THREE.Euler(
-      0,
-      0,
-      0,
-      "ZYX"
-    );
-
-  euler.setFromQuaternion(
-    quaternion,
-    "ZYX"
+    )
   );
-
-  const normalizeDegrees =
-    (radians) => {
-
-      const degrees =
-        THREE.MathUtils.radToDeg(
-          radians
-        );
-
-      let normalized =
-        THREE.MathUtils.euclideanModulo(
-          degrees,
-          360
-        );
-
-      /*
-        Neteja numèrica:
-
-        -0
-        0.00000000001
-        359.999999999
-      */
-      if (
-        Math.abs(normalized) < 1e-8 ||
-        Math.abs(normalized - 360) < 1e-8
-      ) {
-        normalized = 0;
-      }
-
-      return normalized;
-
-    };
-
-  return {
-
-    rx:
-      normalizeDegrees(
-        euler.x
-      ),
-
-    ry:
-      normalizeDegrees(
-        euler.y
-      ),
-
-    rz:
-      normalizeDegrees(
-        euler.z
-      )
-
-  };
-
 }
-
-
 
 export function getReferenceRobotEuler(
   piece

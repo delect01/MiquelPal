@@ -1,4 +1,5 @@
 import * as THREE from "three";
+import { getPieceCollisionGeometry } from "./collisionGeometryStore.js";
 
 const IMPORTED_FACE_PREFIX =
   "IMPORTED_FACE_";
@@ -59,14 +60,14 @@ export function getImportedFace(
       referencePoint
     ) ||
     !Array.isArray(
-      piece.collisionGeometry?.faces
+      getPieceCollisionGeometry(piece)?.faces
     )
   ) {
     return null;
   }
 
   return (
-    piece.collisionGeometry.faces.find(
+    getPieceCollisionGeometry(piece).faces.find(
       (face) =>
         face.id === referencePoint
     ) ?? null
@@ -161,14 +162,14 @@ export function getImportedReferenceOptions(
     piece?.pieceType !==
       "IMPORTED_3D" ||
     !Array.isArray(
-      piece.collisionGeometry?.faces
+      getPieceCollisionGeometry(piece)?.faces
     )
   ) {
     return [];
   }
 
   const namedFaces =
-    piece.collisionGeometry.faces.map(
+    getPieceCollisionGeometry(piece).faces.map(
       (face) => ({
         value: face.id,
         label: getFaceName(
